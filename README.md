@@ -41,7 +41,7 @@ CentralSalesDashboard/
    ```
 2. Install dependencies:
    ```bash
-   pip install fastapi uvicorn requests openpyxl pydantic
+   pip install -r requirements.txt
    ```
 3. Run the backend server:
    ```bash
