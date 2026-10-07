@@ -15,7 +15,9 @@ from openpyxl import load_workbook
 # CONFIGURATION
 # ============================================================
 
-DB_PATH = Path(r"D:\CentralSalesDashboard\data\central.db")
+BASE_DIR = Path(__file__).resolve().parent.parent
+_LEGACY_DB_PATH = Path(r"D:\CentralSalesDashboard\data\central.db")
+DB_PATH = _LEGACY_DB_PATH if _LEGACY_DB_PATH.exists() else (BASE_DIR / "data" / "central.db")
 
 REQUEST_TIMEOUT = 30
 
