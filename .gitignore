@@ -45,5 +45,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Frontend dev caches
+.idea/
+.vscode/
+.DS_Store
+
 # Logs
 *.log
+
+# Editor scratch
+*.swp
+*.swo

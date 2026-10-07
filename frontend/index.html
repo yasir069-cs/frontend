@@ -1,1 +1,289 @@
-<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Central Sales Dashboard</title></head><body><div id="root"></div><script src="app.js"></script></body></html> 
+<!DOCTYPE html>
+<html lang="en" data-theme="all">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0B0F23" />
+  <meta name="description" content="ICH — All Branches Sales Dashboard for Force Holding Co." />
+  <title>ICH — All Branches Sales Dashboard</title>
+
+  <!-- Inter + Cairo (Arabic) from a stable CDN; falls back gracefully if blocked -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;600;700;800&display=swap"
+  />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" id="app" data-sidebar="expanded">
+    <!-- Sidebar overlay (mobile) -->
+    <div class="sidebar-overlay" tabindex="-1" aria-hidden="true"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="sidebar-brand">
+        <div class="brand-mark" aria-hidden="true">FH</div>
+        <div class="brand-text">
+          <b>Force Holding Co</b>
+          <small>
+            <span class="live-dot" id="sidebarLiveDot" aria-hidden="true"></span>
+            <span id="sidebarLiveText">Online</span>
+          </small>
+        </div>
+      </div>
+
+      <nav class="nav" id="sideNav" aria-label="Sections">
+        <div class="nav-section-title" data-i18n="nav_overview">Overview</div>
+        <button class="nav-item active" data-nav="overview" aria-label="Overview">
+          <span class="nav-icon" data-icon="chart"></span>
+          <span class="nav-label" data-i18n="nav_overview">Overview</span>
+        </button>
+
+        <div class="nav-section-title" data-i18n="nav_performance">Performance</div>
+        <button class="nav-item" data-nav="performance" aria-label="Performance">
+          <span class="nav-icon" data-icon="chartBar"></span>
+          <span class="nav-label" data-i18n="nav_performance">Performance</span>
+        </button>
+
+        <div class="nav-section-title" data-i18n="nav_branches">Branches</div>
+        <button class="nav-item" data-nav="ranking" aria-label="Branch Ranking">
+          <span class="nav-icon" data-icon="fire"></span>
+          <span class="nav-label" data-i18n="nav_ranking">Branch Ranking</span>
+        </button>
+
+        <div class="nav-section-title" data-i18n="nav_sources">Revenue</div>
+        <button class="nav-item" data-nav="sources" aria-label="Revenue Sources">
+          <span class="nav-icon" data-icon="chartPie"></span>
+          <span class="nav-label" data-i18n="nav_sources">Revenue Sources</span>
+        </button>
+
+        <div class="nav-section-title" data-i18n="nav_annual">Reports</div>
+        <button class="nav-item" data-nav="annual" aria-label="2026 Annual Report">
+          <span class="nav-icon" data-icon="target"></span>
+          <span class="nav-label" data-i18n="nav_annual">2026 Annual Report</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="foot-text">
+          <b>v2.0</b> · Force Holding Co
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main column -->
+    <div class="main">
+      <header class="header">
+        <button class="icon-btn" data-action="toggle-sidebar" aria-label="Toggle sidebar" title="Toggle sidebar">
+          <span data-icon="menu" aria-hidden="true"></span>
+        </button>
+
+        <div class="title-block">
+          <h1>
+            <span data-i18n="app_title">ICH — All Branches Sales Dashboard</span>
+          </h1>
+          <div class="subtitle">
+            <span data-i18n="app_subtitle">Force Holding Co</span>
+            · <span id="periodLabel">—</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <span class="gym-badge" id="gymBadge" aria-live="polite">
+            <img alt="Active gym logo" data-logo-stem="all-branches" />
+            <span class="badge-text">
+              <b id="gymBadgeName">All Branches</b>
+              <small id="gymBadgeSub">Force Holding Co</small>
+            </span>
+          </span>
+
+          <span class="status-pill" id="statusPill">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="statusPillText">Online</span>
+          </span>
+
+          <button class="lang-toggle" id="langToggle" aria-label="Switch language">
+            <span data-icon="globe" aria-hidden="true"></span>
+            <span id="langToggleText">العربية</span>
+          </button>
+
+          <button class="refresh-btn" id="refreshBtn" aria-label="Refresh">
+            <span data-icon="refresh" aria-hidden="true"></span>
+            <span data-i18n="action_refresh">Refresh</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="content" id="content">
+        <!-- Filters -->
+        <section class="filters" aria-label="Dashboard filters">
+          <div class="filter">
+            <label data-i18n="filter_branch">Branch</label>
+            <select id="branchSelect" aria-label="Branch"></select>
+          </div>
+
+          <div class="filter">
+            <label data-i18n="filter_period">Period</label>
+            <div class="filter-presets" id="periodPresets" role="group" aria-label="Period presets">
+              <button class="chip" data-preset="today" data-i18n="filter_preset_today">Today</button>
+              <button class="chip" data-preset="15" data-i18n="filter_preset_15">Last 15 Days</button>
+              <button class="chip" data-preset="30" data-i18n="filter_preset_30">Last 1 Month</button>
+              <button class="chip active" data-preset="month" data-i18n="filter_preset_30">Month</button>
+              <button class="chip" data-preset="custom" data-i18n="filter_preset_custom">Custom</button>
+            </div>
+          </div>
+
+          <div class="filter" id="customRange" style="display:none">
+            <label data-i18n="filter_from">From</label>
+            <input type="date" id="dateFrom" />
+          </div>
+          <div class="filter" id="customRangeTo" style="display:none">
+            <label data-i18n="filter_to">To</label>
+            <input type="date" id="dateTo" />
+          </div>
+
+          <div class="filter">
+            <label>Year</label>
+            <select id="yearSelect" aria-label="Year"></select>
+          </div>
+
+          <div class="filter">
+            <label>Month</label>
+            <select id="monthSelect" aria-label="Month"></select>
+          </div>
+        </section>
+
+        <!-- Error slot -->
+        <div id="errorSlot"></div>
+
+        <!-- KPI grid -->
+        <section class="kpi-grid" id="kpiGrid" aria-label="Key metrics"></section>
+
+        <!-- Main revenue trend (above the fold) -->
+        <section class="section fade-in" id="trendSection" aria-label="Revenue trend">
+          <div class="section-head">
+            <div class="section-title">
+              <span class="icon-wrap" data-icon="chart"></span>
+              <span data-i18n="sec_daily_trend">Revenue Trend</span>
+            </div>
+            <span class="section-note" id="trendNote">—</span>
+          </div>
+          <div class="section-body">
+            <div class="chart-wrap">
+              <canvas id="dailyChart"></canvas>
+            </div>
+            <div class="legend" id="dailyLegend"></div>
+          </div>
+        </section>
+
+        <!-- Two-col: branch performance + revenue sources -->
+        <div class="two-col">
+          <section class="section fade-in" aria-label="Branch performance and ranking">
+            <div class="section-head">
+              <div class="section-title">
+                <span class="icon-wrap" data-icon="fire"></span>
+                <span data-i18n="sec_ranking">Branch Performance &amp; Ranking</span>
+              </div>
+              <span class="section-note" data-i18n="t_rank_label">Ranked by revenue</span>
+            </div>
+            <div class="section-body">
+              <div class="ranking" id="rankingList"></div>
+            </div>
+          </section>
+
+          <section class="section fade-in" aria-label="Revenue source breakdown">
+            <div class="section-head">
+              <div class="section-title">
+                <span class="icon-wrap" data-icon="chartPie"></span>
+                <span data-i18n="sec_revenue">Revenue Source Breakdown</span>
+              </div>
+              <span class="section-note" id="revenueNote">—</span>
+            </div>
+            <div class="section-body">
+              <div class="rev-grid" id="revenueGrid"></div>
+              <div id="revenuePartial"></div>
+              <div class="chart-wrap" style="margin-top:14px;height:240px">
+                <canvas id="revenueChart"></canvas>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Monthly bars -->
+        <section class="section fade-in" aria-label="Monthly sales vs target">
+          <div class="section-head">
+            <div class="section-title">
+              <span class="icon-wrap" data-icon="chartBar"></span>
+              <span data-i18n="sec_monthly_compare">Monthly Sales vs Target</span>
+            </div>
+            <span class="section-note" id="monthlyNote">—</span>
+          </div>
+          <div class="section-body">
+            <div class="chart-wrap" style="height:280px">
+              <canvas id="monthlyChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- Units (per-gym cards) -->
+        <section class="section fade-in" aria-label="Sales unit performance">
+          <div class="section-head">
+            <div class="section-title">
+              <span class="icon-wrap" data-icon="building"></span>
+              <span data-i18n="sec_units">Sales Unit Performance</span>
+            </div>
+            <span class="section-note" id="unitNote">—</span>
+          </div>
+          <div class="section-body">
+            <div class="units-grid" id="unitsGrid"></div>
+          </div>
+        </section>
+
+        <!-- Annual report -->
+        <section class="section fade-in" aria-label="2026 annual report">
+          <div class="section-head">
+            <div class="section-title">
+              <span class="icon-wrap" data-icon="target"></span>
+              <span data-i18n="sec_annual">2026 Annual Performance Report</span>
+            </div>
+            <span class="section-note" id="annualNote">—</span>
+          </div>
+          <div class="section-body flush">
+            <div class="table-wrap">
+              <table id="annualTable">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th class="right" data-i18n="t_ann_actual">Actual</th>
+                    <th class="right" data-i18n="t_ann_target_total">Target</th>
+                    <th class="right" data-i18n="t_ann_achievement">Achievement</th>
+                    <th class="right" data-i18n="t_ann_remaining">Remaining</th>
+                  </tr>
+                </thead>
+                <tbody id="annualTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <footer style="text-align:center;color:var(--text-3);font-size:11.5px;padding:20px 0 6px">
+          ICH Sales Dashboard · Force Holding Co
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <!-- Scripts (order matters: themes/icons/i18n first, then charts/sidebar, then app) -->
+  <script src="themes.js"></script>
+  <script src="icons.js"></script>
+  <script src="i18n.js"></script>
+  <script src="data.js"></script>
+  <script src="sidebar.js"></script>
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
