@@ -1,707 +1,941 @@
 /* =============================================================
-   app.js
-   Orchestrator. Wires:
-     - Themes (per-gym CSS variables, logo, palette)
-     - i18n (EN/AR with RTL)
-     - Sidebar (desktop collapse + mobile drawer)
-     - Filters (branch, period presets, custom dates, year/month)
-     - Data layer (parallel fetch, SWR cache, retry/backoff)
-     - Charts (line, multi-line, bars, donut)
-     - Ranking (revenue-sorted, per-gym brand colors)
-     - Annual report (green=0 remaining, yellow<80%, red<40%)
-     - Status pill (online / syncing / offline) + last-synced
+   app.js  (v3) — entry point (esbuild bundles this)
+   Orchestrates: themes, i18n, sidebar, listboxes, range filter,
+   data layer, charts, tickers, confetti, keyboard shortcuts.
    ============================================================= */
 
-(function () {
-  "use strict";
+"use strict";
 
-  const ICH = window.ICH;
-  const { themes, icons, i18n, data, sidebar, charts } = ICH;
-  const t = i18n.t;
-  const fmtMoney = data.fmtMoney;
-  const fmtPct = data.fmtPct;
-  const fmtInt = data.fmtInt;
-  const icon = icons.icon;
+import * as themes from "./themes.js";
+import * as i18n from "./i18n.js";
+import { icon, hydrateIcons } from "./icons.js";
+import * as data from "./data.js";
+import * as charts from "./charts.js";
+import { createListbox } from "./components/listbox.js";
+import { tick } from "./components/ticker.js";
+import { burstAt } from "./confetti.js";
+import { initSidebar } from "./sidebar.js";
 
-  // ----------------------------------------------------------
-  // App state
-  // ----------------------------------------------------------
-  const MONTHS = ["January","February","March","April","May","June",
-                  "July","August","September","October","November","December"];
-  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const t = i18n.t;
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  const state = {
-    year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
-    branch: "all",                // gym id, or "all"
-    preset: "month",              // today | 15 | 30 | month | custom
-    dateFrom: null,               // YYYY-MM-DD
-    dateTo: null,
-    lastSync: null,
-    syncing: false,
-  };
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const REVENUE_KEYS = themes.REVENUE_KEYS;
 
-  // In-flight loaders + aborters
-  let inflightToken = 0;
-  const debouncers = {};
+// ----------------------------------------------------------
+// State
+// ----------------------------------------------------------
+const now = new Date();
+const state = {
+  year: now.getFullYear(),
+  month: now.getMonth() + 1,
+  branch: "all",
+  lastResult: null,
+  lastData: null,
+};
 
-  // ----------------------------------------------------------
-  // Utilities
-  // ----------------------------------------------------------
-  function $(sel) { return document.querySelector(sel); }
-  function $$(sel) { return Array.from(document.querySelectorAll(sel)); }
-  function el(tag, cls, html) {
-    const x = document.createElement(tag);
-    if (cls) x.className = cls;
-    if (html != null) x.innerHTML = html;
-    return x;
-  }
-  function debounce(key, fn, ms) {
-    if (debouncers[key]) clearTimeout(debouncers[key]);
-    debouncers[key] = setTimeout(() => { delete debouncers[key]; fn(); }, ms);
-  }
-  function setStatus(kind, text) {
-    const pill = $("#statusPill");
-    const txt = $("#statusPillText");
-    const dot = $("#sidebarLiveDot");
-    const dtxt = $("#sidebarLiveText");
-    if (!pill) return;
-    pill.classList.remove("syncing", "offline");
-    if (kind === "syncing") pill.classList.add("syncing");
-    if (kind === "offline") pill.classList.add("offline");
-    if (dot) dot.classList.toggle("off", kind === "offline");
-    if (dtxt) dtxt.classList.toggle("off", kind === "offline");
-    txt.textContent = text;
-    if (dtxt) dtxt.textContent = text;
-  }
-  function periodLabelText() {
-    if (state.preset === "today") return t("filter_preset_today");
-    if (state.preset === "15") return t("filter_preset_15");
-    if (state.preset === "30") return t("filter_preset_30");
-    if (state.preset === "custom") {
-      const f = state.dateFrom || "—";
-      const to = state.dateTo || "—";
-      return `${f} → ${to}`;
-    }
-    return `${MONTHS[state.month - 1]} ${state.year}`;
-  }
+// Revenue Trend view modes: daily | last | custom
+const trendState = { mode: "daily", from: null, to: null, customRows: null, customKey: "" };
 
-  // ----------------------------------------------------------
-  // Theme application
-  // ----------------------------------------------------------
-  function applyThemeForBranch(branchId) {
-    const theme = themes.applyTheme(branchId);
-    const badgeName = $("#gymBadgeName");
-    const badgeSub = $("#gymBadgeSub");
-    const badgeImg = $("#gymBadge img");
-    if (badgeName) badgeName.textContent = theme.shortName;
-    if (badgeSub) badgeSub.textContent = theme.id === "all" ? t("all_branches") : theme.name;
-    if (badgeImg) badgeImg.dataset.logoStem = theme.logo;
-    themes.resolveAllLogos();
-    document.title = `${theme.shortName} · ${t("app_title")}`;
-  }
+let branchLb = null;
+let bfcacheRestore = false;
 
-  // ----------------------------------------------------------
-  // Filters: year/month/branch/period
-  // ----------------------------------------------------------
-  function buildYearMonthSelectors() {
-    const ys = $("#yearSelect");
-    const ms = $("#monthSelect");
-    ys.innerHTML = "";
-    ms.innerHTML = "";
-    for (let y = 2025; y <= 2030; y++) {
-      const o = el("option"); o.value = y; o.textContent = y;
-      ys.appendChild(o);
-    }
-    MONTHS.forEach((m, i) => {
-      const o = el("option"); o.value = i + 1; o.textContent = m;
-      ms.appendChild(o);
-    });
-    ys.value = state.year;
-    ms.value = state.month;
-    ys.addEventListener("change", () => { state.year = +ys.value; state.preset = "month"; syncPresetChips(); load(); });
-    ms.addEventListener("change", () => { state.month = +ms.value; state.preset = "month"; syncPresetChips(); load(); });
-  }
+const kpiPrev = new Map(); // key -> last shown numeric value
+const lastHtml = new Map(); // container id -> last innerHTML (skip unchanged)
+const celebrated = new Set(); // branch codes that already fired confetti
 
-  function buildBranchSelector(branches) {
-    const sel = $("#branchSelect");
-    sel.innerHTML = "";
-    const all = el("option");
-    all.value = "all";
-    all.textContent = t("all_branches") + " (Force Holding Co)";
-    sel.appendChild(all);
+// ----------------------------------------------------------
+// Small helpers
+// ----------------------------------------------------------
+function setHtmlIfChanged(id, html) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (lastHtml.get(id) === html) return;
+  lastHtml.set(id, html);
+  el.innerHTML = html;
+}
 
-    const known = new Set((branches || []).map((b) => b.code));
-    // Always include all 6 gym themes, even if backend hasn't been updated
-    themes.DEFAULT_GYM_ORDER.forEach((id) => {
-      const theme = themes.getTheme(id);
-      const o = el("option");
-      o.value = theme.id;
-      o.textContent = theme.shortName + (known.has(theme.id) ? "" : " · preview");
-      sel.appendChild(o);
-    });
-    sel.value = state.branch;
-    sel.addEventListener("change", () => {
-      state.branch = sel.value;
-      applyThemeForBranch(state.branch);
-      // Charts re-render with the new palette without refetching data
-      rerenderChartsFromCache();
-    });
-  }
+function num(v) { const x = Number(v); return isFinite(x) ? x : 0; }
 
-  function syncPresetChips() {
-    $$("#periodPresets .chip").forEach((c) => c.classList.toggle("active", c.dataset.preset === state.preset));
-    const showCustom = state.preset === "custom";
-    $("#customRange").style.display = showCustom ? "" : "none";
-    $("#customRangeTo").style.display = showCustom ? "" : "none";
-  }
+/** Escape dynamic text before it is inserted via innerHTML. */
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
-  function wirePresets() {
-    $$("#periodPresets .chip").forEach((c) => {
-      c.addEventListener("click", () => {
-        const preset = c.dataset.preset;
-        state.preset = preset;
-        syncPresetChips();
-        if (preset === "today") {
-          const today = new Date();
-          state.dateFrom = iso(today); state.dateTo = iso(today);
-          load();
-        } else if (preset === "15") {
-          const today = new Date();
-          const start = new Date(today); start.setDate(today.getDate() - 14);
-          state.dateFrom = iso(start); state.dateTo = iso(today);
-          load();
-        } else if (preset === "30") {
-          const today = new Date();
-          const start = new Date(today); start.setDate(today.getDate() - 29);
-          state.dateFrom = iso(start); state.dateTo = iso(today);
-          load();
-        } else if (preset === "custom") {
-          // do nothing until dates are picked
-        } else if (preset === "month") {
-          load();
-        }
-      });
-    });
+function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
 
-    const fromEl = $("#dateFrom"), toEl = $("#dateTo");
-    fromEl.addEventListener("change", () => {
-      state.dateFrom = fromEl.value || null;
-      if (state.dateFrom && state.dateTo) load();
-    });
-    toEl.addEventListener("change", () => {
-      state.dateTo = toEl.value || null;
-      if (state.dateFrom && state.dateTo) load();
-    });
-  }
+function isCurrentRealMonth() {
+  const t = new Date();
+  return state.year === t.getFullYear() && state.month === t.getMonth() + 1;
+}
 
-  function iso(d) {
-    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-  }
+function periodLabel() {
+  return i18n.monthName(state.month) + " " + state.year;
+}
 
-  // ----------------------------------------------------------
-  // Skeleton helpers
-  // ----------------------------------------------------------
-  function skeletonKpis() {
-    return [1,2,3,4].map(() =>
-      `<div class="kpi"><div class="kpi-head"><div class="kpi-label skeleton k-line" style="width:80px"></div></div>
-       <div class="kpi-value skeleton k-line" style="width:60%"></div>
-       <div class="kpi-sub"><span class="skeleton k-pill"></span></div></div>`
-    ).join("");
-  }
-  function skeletonRow() {
-    return `<div class="ranking-row" style="opacity:.6">
-      <div class="skeleton k-pill"></div><div class="skeleton k-pill"></div>
-      <div><div class="skeleton k-line" style="width:60%"></div><div class="skeleton k-line" style="width:40%;margin-top:6px"></div></div>
-      <div class="skeleton k-pill"></div>
-    </div>`;
-  }
-  function skeletonTable() {
-    return Array.from({ length: 8 }).map(() =>
-      `<tr><td><div class="skeleton k-line" style="width:60%"></div></td>
-           <td><div class="skeleton k-line" style="width:80%"></div></td>
-           <td><div class="skeleton k-line" style="width:70%"></div></td>
-           <td><div class="skeleton k-line" style="width:50%"></div></td>
-           <td><div class="skeleton k-line" style="width:80%"></div></td></tr>`
-    ).join("");
-  }
+function branchName(unit) {
+  return i18n.getLang() === "ar" ? unit.name_ar : unit.name_en;
+}
 
-  // ----------------------------------------------------------
-  // Error boundary per widget
-  // ----------------------------------------------------------
-  function widgetError(message) {
-    return `<div class="error-box">
-      <span>${icon("alert")} <span style="margin-inline-start:8px">${message}</span></span>
-      <button data-retry="1">${t("action_retry")}</button>
-    </div>`;
-  }
-  function widgetRetry(node, fn) {
-    const btn = node.querySelector("[data-retry]");
-    if (btn) btn.addEventListener("click", fn);
-  }
+function activeUnits(d) {
+  return (d.sales_units || []).filter((u) => !u.is_pending);
+}
 
-  // ----------------------------------------------------------
-  // KPI rendering
-  // ----------------------------------------------------------
-  function kpiCards(d) {
-    if (!d) return widgetError(t("t_offline_msg"));
-    const branchUnits = filterUnitsForBranch(d);
-    const unit = state.branch === "all" ? null : state.branch;
-    const sales = unit ? Number(branchUnits[0]?.sales || 0) : Number(d.kpis.sales || 0);
-    const target = unit ? Number(branchUnits[0]?.target || 0) : Number(d.kpis.target || 0);
-    const tx = unit ? Number(branchUnits[0]?.transactions || 0) : Number(d.kpis.transactions || 0);
-    const achievement = target ? (sales / target) * 100 : 0;
-    const remaining = Math.max(target - sales, 0);
-    const avg = tx ? sales / tx : 0;
-    const daysRem = Number(d.kpis.days_remaining || 0);
-    const required = daysRem > 0 ? remaining / daysRem : 0;
-    const todaySales = Number(d.today?.sales || 0);
-    const todayTx = Number(d.today?.transactions || 0);
-    const prev = previousPeriodSnapshot();
-    const dSales = prev ? (sales - prev.sales) : 0;
-    const dSalesPct = prev && prev.sales > 0 ? (dSales / prev.sales) * 100 : null;
-    const dTx = prev ? (tx - prev.tx) : 0;
-    const dTxPct = prev && prev.tx > 0 ? (dTx / prev.tx) * 100 : null;
+function pendingUnits(d) {
+  return (d.sales_units || []).filter((u) => u.is_pending);
+}
 
-    function deltaCls(p) {
-      if (p == null) return "flat";
-      if (p > 0.5) return "";
-      if (p < -0.5) return "down";
-      return "flat";
-    }
-    function deltaText(p) {
-      if (p == null) return "—";
-      const arrow = p >= 0 ? "▲" : "▼";
-      return `${arrow} ${Math.abs(p).toFixed(1)}%`;
-    }
+function scopedUnit(d) {
+  if (state.branch === "all") return null;
+  return (d.sales_units || []).find((u) => u.code === state.branch) || null;
+}
 
-    const cards = [
-      { label: t("kpi_today_sales"), value: fmtMoney(todaySales), sub: t("t_transactions", { n: fmtInt(todayTx) }), icon: "bolt", accent: 0 },
-      { label: t("kpi_month_sales"), value: fmtMoney(sales), sub: periodLabelText(), icon: "money", accent: 1, delta: { cls: deltaCls(dSalesPct), text: deltaText(dSalesPct) } },
-      { label: t("kpi_target"), value: fmtMoney(target), sub: state.branch === "all" ? t("t_kpi_sub_unit_all") : t("t_kpi_sub_unit_one"), icon: "target", accent: 2 },
-      { label: t("kpi_achievement"), value: fmtPct(achievement), sub: achievement >= 100 ? t("t_target_reached") : t("t_kpi_sub_balance"), icon: "check", accent: 3 },
-      { label: t("kpi_remaining"), value: fmtMoney(remaining), sub: remaining > 0 ? t("t_kpi_sub_balance") : t("t_target_reached"), icon: "alert", accent: 4 },
-      { label: t("kpi_required"), value: fmtMoney(required), sub: daysRem > 0 ? t("t_days_remaining", { n: daysRem }) : t("t_month_complete"), icon: "calendar", accent: 5 },
-      { label: t("kpi_transactions"), value: fmtInt(tx), sub: t("t_kpi_sub_selected_period"), icon: "users", accent: 6, delta: { cls: deltaCls(dTxPct), text: deltaText(dTxPct) } },
-      { label: t("kpi_avg"), value: fmtMoney(avg), sub: t("t_avg", { v: fmtMoney(avg) }), icon: "star", accent: 7 },
-    ];
+function deltaChip(cur, prev) {
+  if (prev == null || prev === 0 || cur == null) return "";
+  const pct = ((cur - prev) / Math.abs(prev)) * 100;
+  if (!isFinite(pct)) return "";
+  const cls = pct > 0.5 ? "up" : pct < -0.5 ? "down" : "flat";
+  const arrow = pct >= 0 ? "▲" : "▼";
+  return '<span class="delta ' + cls + '">' + arrow + " " + Math.abs(pct).toFixed(1) + "%</span>";
+}
 
-    return cards.map((c) => `
-      <div class="kpi accent-${c.accent}" role="group" aria-label="${c.label}">
-        <div class="kpi-head">
-          <div class="kpi-label">${c.label}</div>
-          <div class="kpi-icon">${icon(c.icon, 18)}</div>
-        </div>
-        <div class="kpi-value">${c.value}</div>
-        <div class="kpi-sub">
-          <span>${c.sub}</span>
-          ${c.delta ? `<span class="delta ${c.delta.cls}">${c.delta.text}</span>` : ""}
-        </div>
-      </div>
-    `).join("");
-  }
+function annualTitle() {
+  const base = t("sec_annual");
+  return state.year === 2026 ? base : base.replace("2026", String(state.year));
+}
 
-  // ----------------------------------------------------------
-  // Branch / unit helpers
-  // ----------------------------------------------------------
-  function filterUnitsForBranch(d) {
-    if (!d || !d.sales_units) return [];
-    if (state.branch === "all") return d.sales_units;
-    return d.sales_units.filter((u) => u.code === state.branch);
-  }
+// ----------------------------------------------------------
+// Status pills
+// ----------------------------------------------------------
+function setStatus(kind, text) {
+  const pill = $("#statusPill");
+  if (!pill) return;
+  pill.classList.remove("syncing", "offline");
+  if (kind === "syncing") pill.classList.add("syncing");
+  if (kind === "offline") pill.classList.add("offline");
+  $("#statusPillText").textContent = text;
+}
 
-  // Cache previous values so the KPI delta chip is meaningful.
-  function previousPeriodSnapshot() {
-    const key = "ich.prev." + state.branch + "." + state.year + "." + state.month;
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (raw) return JSON.parse(raw);
-    } catch (_) { /* ignore */ }
-    return null;
-  }
-  function savePreviousPeriodSnapshot(sales, tx) {
-    const key = "ich.prev." + state.branch + "." + state.year + "." + state.month;
-    try { sessionStorage.setItem(key, JSON.stringify({ sales, tx })); } catch (_) { /* ignore */ }
-  }
+function setDemoMode(on) {
+  const pill = $("#demoPill");
+  if (pill) pill.hidden = !on;
+}
 
-  // ----------------------------------------------------------
-  // Trend chart (single gym or combined)
-  // ----------------------------------------------------------
-  function renderTrend(d) {
-    if (!d) return;
-    const note = $("#trendNote");
-    note.textContent = periodLabelText();
-    const canvas = $("#dailyChart");
-    const rows = d.daily || [];
-    if (state.branch === "all") {
-      // Multi-line: one line per known branch in their own brand color
-      const allThemes = themes.DEFAULT_GYM_ORDER.map((id) => themes.getTheme(id));
-      const series = allThemes.map((th) => ({
-        name: th.shortName,
-        color: th.primary,
-        data: rows.map((r) => r[th.id] != null ? Number(r[th.id]) : null),
-      }));
-      charts.multiLine(canvas, {
-        series,
-        labels: rows.map((r, i) => r.date ? r.date.slice(8, 10) : (i + 1)),
-      });
-      // legend
-      const legend = $("#dailyLegend");
-      legend.innerHTML = series.map((s) => `<span class="item"><span class="swatch" style="background:${s.color}"></span>${s.name}</span>`).join("");
-    } else {
-      const series = rows.map((r) => r[state.branch] != null ? Number(r[state.branch]) : (r.combined != null ? Number(r.combined) : null));
-      charts.line(canvas, {
-        series,
-        labels: rows.map((r, i) => r.date ? r.date.slice(8, 10) : (i + 1)),
-      });
-      $("#dailyLegend").innerHTML = `<span class="item">${icon("bolt", 14)} ${periodLabelText()}</span>`;
-    }
-  }
+// ----------------------------------------------------------
+// KPI cards (tickers + sparklines + deltas)
+// ----------------------------------------------------------
+function kpiCard(cfg) {
+  return (
+    '<div class="kpi accent-' + cfg.accent + '" role="group" aria-label="' + cfg.label + '">' +
+    '<div class="kpi-head"><span class="kpi-label">' + cfg.label + "</span>" +
+    '<span class="kpi-icon">' + icon(cfg.iconic, 18) + "</span></div>" +
+    '<div class="kpi-value' + (cfg.mono ? " tabular" : "") + '"' + (cfg.id ? ' id="' + cfg.id + '"' : "") + ">" + (cfg.value != null ? cfg.value : "—") + "</div>" +
+    '<div class="kpi-sub"><span class="kpi-sub-text">' + (cfg.sub || "") + "</span>" + (cfg.delta || "") + "</div>" +
+    (cfg.spark != null ? '<div class="kpi-spark" data-spark="' + cfg.spark + '"></div>' : "") +
+    "</div>"
+  );
+}
 
-  // ----------------------------------------------------------
-  // Monthly chart (actual vs target) + 2026 annual table
-  // ----------------------------------------------------------
-  function renderMonthly(d) {
-    if (!d) return;
+function renderKpis(result) {
+  const d = result.data;
+  const ctx = result.context || {};
+  const unit = scopedUnit(d);
+  const isAll = state.branch === "all";
+
+  const sales = unit ? num(unit.sales) : num(d.kpis.sales);
+  const tx = unit ? num(unit.transactions) : num(d.kpis.transactions);
+  const customers = unit
+    ? (unit.customers == null ? null : num(unit.customers))
+    : (d.kpis.customers == null ? null : num(d.kpis.customers));
+  const target = unit ? num(unit.target) : activeUnits(d).reduce((s, u) => s + num(u.target), 0);
+  const achievement = target > 0 ? (sales / target) * 100 : 0;
+  const remaining = Math.max(target - sales, 0);
+
+  // Today + run-rate
+  const todaySales = num(d.today && d.today.sales);
+  const todayTx = num(d.today && d.today.transactions);
+  const inProgress = isCurrentRealMonth();
+  const dim = daysInMonth(state.year, state.month);
+  const today = new Date();
+  const daysElapsed = inProgress ? today.getDate() : dim;
+  const daysRemaining = Math.max(dim - daysElapsed, 0);
+  const requiredDaily = daysRemaining > 0 ? remaining / daysRemaining : 0;
+  const pace = inProgress && target > 0 ? (target * daysElapsed) / dim : 0;
+
+  // Deltas vs previous month (context merge)
+  const prevSales = ctx.prev && !unit ? num(ctx.prev.kpis.sales) : null;
+  const prevTx = ctx.prev && !unit ? num(ctx.prev.kpis.transactions) : null;
+  const prevCustomers = ctx.prev && !unit && ctx.prev.kpis.customers != null ? num(ctx.prev.kpis.customers) : null;
+
+  // 3-month sparkline window (real per-month figures only)
+  const sparkWindow = () => {
     const rows = d.monthly || [];
-    $("#monthlyNote").textContent = state.year;
-    const a = rows.map((r) => Number(r.combined || 0));
-    const t = rows.map((r) => Number(r.target || 0));
-    charts.groupedBars($("#monthlyChart"), {
-      labels: MONTHS_SHORT,
-      actual: a,
-      target: t,
-    });
+    const m = state.month;
+    if (m === 1) {
+      const dec = ctx.prev && Array.isArray(ctx.prev.monthly) ? ctx.prev.monthly[11] : null;
+      return [dec, rows[0]].filter(Boolean);
+    }
+    if (m === 2) return [rows[0], rows[1]].filter(Boolean);
+    return [rows[m - 3], rows[m - 2], rows[m - 1]].filter(Boolean);
+  };
+  const sparkVals = (metric) => sparkWindow().map((r) => num(r[metric]));
 
-    // Annual table — per spec: green when remaining is 0, yellow below 80%, red below 40%.
-    const tbody = $("#annualTbody");
-    tbody.innerHTML = rows.map((r, i) => {
-      const actual = Number(r.combined || 0);
-      const target = Number(r.target || 0);
-      const remaining = Math.max(target - actual, 0);
-      const pct = target ? (actual / target) * 100 : 0;
-      let cls = "good";
-      if (remaining > 0) {
-        if (pct < 40) cls = "bad";
-        else if (pct < 80) cls = "warn";
+  const cards = [
+    {
+      id: "kpiToday", label: t("kpi_today_sales"), value: data.fmtMoney(todaySales), mono: true, iconic: "bolt", accent: 0,
+      sub: t("t_transactions", { n: data.fmtInt(todayTx) }),
+    },
+    {
+      id: "kpiSales", label: t("kpi_month_sales"), value: data.fmtMoney(sales), mono: true, iconic: "money", accent: 1,
+      sub: periodLabel(), delta: deltaChip(sales, prevSales), spark: "sales",
+    },
+    {
+      label: t("kpi_target"), value: target > 0 ? data.fmtMoney(target) : "—", mono: true, iconic: "target", accent: 2,
+      sub: inProgress && pace > 0 ? t("kpi_pace", { v: data.fmtMoney(Math.round(pace)) }) : (isAll ? t("all_branches") : branchName(unit) || ""),
+    },
+    {
+      id: "kpiAch", label: t("kpi_achievement"), value: data.fmtPct(achievement), mono: true, iconic: "check", accent: 3,
+      sub: achievement >= 100 && target > 0 ? t("t_target_reached") : t("t_target", { v: data.fmtMoney(remaining) }),
+    },
+    {
+      label: t("kpi_remaining"), value: target > 0 ? data.fmtMoney(remaining) : "—", mono: true, iconic: "alert", accent: 4,
+      sub: inProgress ? t("t_days_remaining", { n: daysRemaining }) : t("t_month_complete"),
+    },
+    {
+      label: t("kpi_required"), value: inProgress && requiredDaily > 0 ? data.fmtMoney(requiredDaily) : "—", mono: true, iconic: "calendar", accent: 5,
+      sub: inProgress ? t("t_days_remaining", { n: daysRemaining }) : t("t_month_complete"),
+    },
+    {
+      id: "kpiTx", label: t("kpi_transactions"), value: data.fmtInt(tx), mono: true, iconic: "users", accent: 6,
+      sub: periodLabel(), delta: deltaChip(tx, prevTx), spark: "tx",
+    },
+    {
+      id: "kpiCust", label: t("kpi_customers"), value: customers == null ? "—" : data.fmtInt(customers), mono: true, iconic: "star", accent: 7,
+      sub: periodLabel(), delta: customers != null ? deltaChip(customers, prevCustomers) : "", spark: "cust",
+    },
+  ];
+
+  setHtmlIfChanged("kpiGrid", cards.map(kpiCard).join(""));
+
+  // Sparklines (3-month mini-trend, real monthly figures)
+  $$(".kpi-spark").forEach((el) => {
+    if (el.dataset.spark === "sales") charts.sparkline(el, sparkVals("sales"));
+    else if (el.dataset.spark === "tx") charts.sparkline(el, sparkVals("transactions"));
+    else if (el.dataset.spark === "cust") charts.sparkline(el, []); // no per-month customer data
+  });
+
+  // Tickers — count up from the previously shown value (0 on
+  // first paint). 800ms ease-out-quart, reduced-motion → instant.
+  tickerFor("kpiToday", todaySales, (v) => data.fmtMoney(v));
+  tickerFor("kpiSales", sales, (v) => data.fmtMoney(v));
+  tickerFor("kpiAch", achievement, (v) => data.fmtPct(v));
+  tickerFor("kpiTx", tx, (v) => data.fmtInt(v));
+  if (customers != null) tickerFor("kpiCust", customers, (v) => data.fmtInt(v));
+  else {
+    const el = $("#kpiCust");
+    if (el) el.textContent = "—";
+  }
+}
+
+function tickerFor(id, value, format) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const prev = kpiPrev.has(id) ? kpiPrev.get(id) : 0;
+  if (prev === value) { el.textContent = format(value); return; }
+  tick(el, bfcacheRestore ? value : prev, value, format, 800);
+  kpiPrev.set(id, value);
+}
+
+// ----------------------------------------------------------
+// Trend chart — Daily / Last Month / Custom modes
+// ----------------------------------------------------------
+function trendRowsFor(result) {
+  const d = result.data;
+  if (trendState.mode === "last") {
+    const prev = result.context && result.context.prev;
+    if (prev && Array.isArray(prev.daily) && prev.daily.length) {
+      const pm = state.month - 1 < 1 ? 12 : state.month - 1;
+      const py = state.month - 1 < 1 ? state.year - 1 : state.year;
+      return { rows: prev.daily, label: i18n.monthName(pm) + " " + py };
+    }
+    return { rows: [], label: t("t_no_daily") };
+  }
+  if (trendState.mode === "custom") {
+    if (!trendState.from || !trendState.to) return { rows: [], label: "—" };
+    const key = trendState.from + "→" + trendState.to;
+    if (trendState.customKey === key && trendState.customRows) {
+      return { rows: trendState.customRows, label: trendState.from + " → " + trendState.to };
+    }
+    return { rows: [], label: t("t_loading") };
+  }
+  return { rows: d.daily || [], label: periodLabel() };
+}
+
+function trendPoints(rows) {
+  return (rows || []).map((r, i, arr) => {
+    const prev = i > 0 ? arr[i - 1] : null;
+    const delta = prev && prev.sales > 0 ? ((r.sales - prev.sales) / prev.sales) * 100 : null;
+    const tip =
+      '<div class="tt-row"><span>' + esc(r.date) + "</span></div>" +
+      '<div class="tt-row"><span>' + t("kpi_month_sales") + "</span><b>" + data.fmtMoney(r.sales) + "</b></div>" +
+      '<div class="tt-row"><span>' + t("kpi_transactions") + "</span><b>" + data.fmtInt(r.transactions) + "</b></div>" +
+      (delta != null ? '<div class="tt-row"><span>' + t("t_vs_prev") + "</span><b>" + (delta >= 0 ? "▲ " : "▼ ") + Math.abs(delta).toFixed(1) + "%</b></div>" : "");
+    return { v: r.sales, label: r.date ? r.date.slice(8, 10) : "", tip };
+  });
+}
+
+function renderTrend(result) {
+  const { rows, label } = trendRowsFor(result);
+  const note = $("#trendNote");
+  if (note) note.textContent = label;
+  charts.lineChart($("#dailyChart"), {
+    points: trendPoints(rows),
+    fmtY: data.fmtKD,
+    emptyText: t("t_no_daily"),
+    animate: !bfcacheRestore,
+  });
+  const legend = $("#dailyLegend");
+  if (legend) {
+    const stats = data.rangeStats(rows, null, null);
+    legend.innerHTML =
+      '<span class="item"><span class="swatch" style="background:var(--brand-line)"></span>' +
+      t("kpi_month_sales") + " · " + data.fmtMoney(stats.sales) + "</span>" +
+      '<span class="item">' + icon("users", 14) + " " + data.fmtInt(stats.transactions) + " " + t("kpi_transactions") + "</span>";
+  }
+}
+
+/** Fetch the custom range (parallel per-month merge) then redraw. */
+async function applyTrendCustom(from, to) {
+  trendState.from = from;
+  trendState.to = to;
+  const key = from + "→" + to;
+  trendState.customKey = key;
+  trendState.customRows = null;
+  if (state.lastResult) renderTrend(state.lastResult); // paints "Loading…"
+  try {
+    const rows = await data.getDailyRange(from, to);
+    if (trendState.customKey !== key) return; // a newer range won
+    trendState.customRows = rows;
+  } catch (_) {
+    if (trendState.customKey === key) trendState.customRows = [];
+  }
+  if (trendState.customKey === key && state.lastResult) renderTrend(state.lastResult);
+}
+
+function iso(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function wireTrendModes() {
+  const seg = $("#rangeFilter");
+  if (!seg) return;
+  seg.querySelectorAll(".seg-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode;
+      trendState.mode = mode;
+      seg.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      const pop = $("#rangePop");
+      if (pop) pop.hidden = mode !== "custom";
+      if (mode === "custom" && !trendState.from) {
+        // Sensible default: trailing 30 days ending today.
+        const to = new Date();
+        const from = new Date(to);
+        from.setDate(to.getDate() - 29);
+        const fEl = $("#rangeFrom"), tEl = $("#rangeTo");
+        if (fEl) fEl.value = iso(from);
+        if (tEl) tEl.value = iso(to);
+        applyTrendCustom(iso(from), iso(to));
+      } else if (state.lastResult) {
+        renderTrend(state.lastResult);
       }
-      return `<tr>
-        <td>${MONTHS[i]}</td>
-        <td class="right">${fmtMoney(actual)}</td>
-        <td class="right">${target ? fmtMoney(target) : '<span class="muted">—</span>'}</td>
-        <td class="right ${cls}">${target ? fmtPct(pct) : '<span class="muted">—</span>'}</td>
-        <td class="right">${target ? fmtMoney(remaining) : '<span class="muted">—</span>'}</td>
-      </tr>`;
-    }).join("");
-    $("#annualNote").textContent = state.year;
-  }
-
-  // ----------------------------------------------------------
-  // Ranking
-  // ----------------------------------------------------------
-  function renderRanking(d) {
-    if (!d) return;
-    const units = (d.sales_units || []).slice();
-    units.sort((a, b) => Number(b.sales || 0) - Number(a.sales || 0));
-    const wrap = $("#rankingList");
-    if (units.length === 0) {
-      wrap.innerHTML = `<div class="empty">No branch data</div>`;
-      return;
-    }
-    wrap.innerHTML = units.map((u, i) => {
-      const theme = themes.getTheme(u.code);
-      const rankCls = i === 0 ? "rank top" : "rank";
-      return `<div class="ranking-row" data-branch="${u.code}" role="button" tabindex="0">
-        <div class="${rankCls}">#${i + 1}</div>
-        <div class="logo-cell"><img alt="${theme.shortName}" data-logo-stem="${theme.logo}"></div>
-        <div class="meta">
-          <b>${theme.shortName}</b>
-          <small>${theme.name} · ${i18n.revLabel("Receipt")}: ${fmtPct(100)}</small>
-        </div>
-        <div class="amount">
-          <b>${fmtMoney(u.sales)}</b>
-          <small>${u.transactions} ${t("kpi_transactions").toLowerCase()}</small>
-        </div>
-      </div>`;
-    }).join("");
-    themes.resolveAllLogos(wrap);
-    // Click to drill into a single branch
-    wrap.querySelectorAll(".ranking-row").forEach((row) => {
-      row.addEventListener("click", () => {
-        const code = row.dataset.branch;
-        if (!code) return;
-        state.branch = code;
-        $("#branchSelect").value = code;
-        applyThemeForBranch(code);
-        rerenderChartsFromCache();
-      });
-      row.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); row.click(); }
-      });
+    });
+  });
+  const apply = $("#rangeApply");
+  if (apply) {
+    apply.addEventListener("click", () => {
+      const f = $("#rangeFrom") ? $("#rangeFrom").value : "";
+      const to2 = $("#rangeTo") ? $("#rangeTo").value : "";
+      if (f && to2 && f <= to2) applyTrendCustom(f, to2);
     });
   }
+}
 
-  // ----------------------------------------------------------
-  // Revenue source breakdown
-  // ----------------------------------------------------------
-  function renderRevenue(d) {
-    if (!d) return;
-    const r = d.revenue;
-    const grid = $("#revenueGrid");
-    const note = $("#revenueNote");
-    note.textContent = periodLabelText();
-    if (!r) {
-      grid.innerHTML = `<div class="empty">${t("t_no_revenue")}</div>`;
-      $("#revenuePartial").innerHTML = "";
-      return;
+// ----------------------------------------------------------
+// Ranking + stacked revenue-mix bars
+// ----------------------------------------------------------
+function renderRanking(d) {
+  const units = activeUnits(d).slice().sort((a, b) => num(b.sales) - num(a.sales));
+  const wrap = $("#rankingList");
+  if (!units.length) {
+    setHtmlIfChanged("rankingList", '<div class="empty">' + t("t_no_data") + "</div>");
+    return;
+  }
+
+  const maxSales = Math.max(1, ...units.map((u) => num(u.sales)));
+  const html = units.map((u, i) => {
+    const mix = data.unitRevenueMix(u, state.year, state.month);
+    const mixTotal = num(u.sales);
+    const segs = REVENUE_KEYS.map((k) => {
+      const v = num(mix.sources[k]);
+      const pct = mixTotal > 0 ? (v / mixTotal) * 100 : 0;
+      return (
+        '<span class="mix-seg" data-src="' + k + '" data-b="' + u.code + '" ' +
+        'style="background:' + themes.colorForRevenue(k) + '" ' +
+        'data-w="' + pct.toFixed(3) + '"></span>'
+      );
+    }).join("");
+
+    const ach = num(u.achievement_pct);
+    const achCls = ach >= 100 ? "good" : ach < 40 ? "bad" : ach < 80 ? "warn" : "neutral";
+    const share = (mixTotal / maxSales) * 100;
+
+    return (
+      '<div class="ranking-row" data-branch="' + u.code + '" role="button" tabindex="0">' +
+      '<div class="rr-top">' +
+      '<span class="rank' + (i === 0 ? " top" : "") + '">#' + (i + 1) + "</span>" +
+      '<span class="lb-dot big" aria-hidden="true" style="background:' + themes.branchAccent(u.code) + '"></span>' +
+      '<div class="rr-name"><b>' + esc(branchName(u)) + "</b><small>" +
+      t("t_transactions", { n: data.fmtInt(u.transactions) }) + " · " +
+      t("t_target", { v: data.fmtMoney(u.target) }) + "</small></div>" +
+      '<div class="rr-amt"><b class="tabular">' + data.fmtMoney(u.sales) + "</b>" +
+      '<span class="ach-chip ' + achCls + '">' + data.fmtPct(ach) + "</span></div>" +
+      "</div>" +
+      '<div class="rr-progress" aria-hidden="true"><span class="' + achCls + '" style="width:' + share.toFixed(1) + '%"></span></div>' +
+      '<div class="r-bar" aria-hidden="true">' + segs + "</div>" +
+      "</div>"
+    );
+  }).join("");
+
+  setHtmlIfChanged("rankingList", html);
+
+  const note = $("#rankingNote");
+  if (note) note.textContent = t("t_rank_label");
+
+  const container = $("#rankingList");
+  if (lastHtml.get("rankingList") === html) return;
+
+  // Animate stacked-bar widths from 0 on mount (600ms, CSS).
+  const reduce = charts.isReducedMotion() || bfcacheRestore;
+  container.querySelectorAll(".mix-seg").forEach((seg) => {
+    const w = seg.dataset.w;
+    if (reduce) { seg.style.width = w + "%"; }
+    else {
+      seg.style.width = "0%";
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { seg.style.width = w + "%"; });
+      });
     }
-    const sources = r.sources || {};
-    const total = Object.values(sources).reduce((s, v) => s + Number(v || 0), 0) || 1;
-    const ordered = ["Receipt", "Daily", "Personal", "Protein"]
-      .filter((k) => sources[k] != null);
-    grid.innerHTML = ordered.map((k) => {
-      const v = Number(sources[k] || 0);
-      const pct = (v / total) * 100;
-      return `<div class="rev-card">
-        <div class="name">${i18n.revLabel(k)}</div>
-        <div class="value">${fmtMoney(v)}</div>
-        <div class="pct">${fmtPct(pct)} of sources</div>
-      </div>`;
-    }).join("") || `<div class="empty">${t("t_no_revenue")}</div>`;
+    seg.addEventListener("mousemove", (e) => {
+      const k = seg.dataset.src;
+      const u = (d.sales_units || []).find((x) => x.code === seg.dataset.b);
+      const mix = data.unitRevenueMix(u, state.year, state.month);
+      const v = num(mix.sources[k]);
+      const pct = num(u && u.sales) > 0 ? (v / num(u.sales)) * 100 : 0;
+      charts.showTooltip(
+        '<div class="tt-row"><span>' + i18n.revLabel(k) + "</span></div>" +
+        '<div class="tt-row"><span>' + data.fmtMoney(v) + "</span><b>" + pct.toFixed(1) + "%</b></div>",
+        e.clientX, e.clientY
+      );
+    });
+    seg.addEventListener("mouseleave", charts.hideTooltip);
+  });
 
-    $("#revenuePartial").innerHTML = r.partial
-      ? `<div class="partial">${icon("alert")} ${t("t_revenue_partial")}</div>`
-      : "";
+  container.querySelectorAll(".ranking-row").forEach((row) => {
+    row.addEventListener("click", () => selectBranch(row.dataset.branch));
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectBranch(row.dataset.branch); }
+    });
+  });
+}
 
-    // Donut
-    const colorMap = {
-      Receipt: themes.getTheme("stretch_men").primary,
-      Daily: themes.getTheme("ihc_express").accent,
-      Personal: themes.getTheme("the_gym_mishref").primary,
-      Protein: themes.getTheme("ihc_jahra").accent,
+// ----------------------------------------------------------
+// Revenue breakdown (donut + ranked list + tooltips)
+// ----------------------------------------------------------
+function revenueTipItems(d, ctx) {
+  const src = (d.revenue && d.revenue.sources) || {};
+  const prevSrc = ctx && ctx.prev && ctx.prev.revenue ? ctx.prev.revenue.sources || {} : null;
+  const total = REVENUE_KEYS.reduce((s, k) => s + num(src[k]), 0);
+  return REVENUE_KEYS.map((k) => {
+    const v = num(src[k]);
+    const pct = total > 0 ? (v / total) * 100 : 0;
+    const prevV = prevSrc ? num(prevSrc[k]) : null;
+    const delta = prevV != null && prevV > 0 ? ((v - prevV) / prevV) * 100 : null;
+    return { key: k, value: v, pct, delta };
+  });
+}
+
+function renderRevenue(result) {
+  const d = result.data;
+  const items = revenueTipItems(d, result.context);
+  const total = items.reduce((s, x) => s + x.value, 0);
+  const note = $("#revenueNote");
+  if (note) note.textContent = periodLabel();
+
+  // Donut
+  const donutItems = items
+    .filter((x) => x.value > 0)
+    .map((x) => ({
+      key: x.key,
+      value: x.value,
+      color: themes.colorForRevenue(x.key),
+      tip:
+        '<div class="tt-row"><span>' + esc(i18n.revLabel(x.key)) + "</span></div>" +
+        '<div class="tt-row"><span>' + data.fmtMoney(x.value) + "</span><b>" + x.pct.toFixed(1) + "%</b></div>" +
+        (x.delta != null ? '<div class="tt-row"><span>' + t("t_vs_prev") + "</span><b>" + (x.delta >= 0 ? "▲ " : "▼ ") + Math.abs(x.delta).toFixed(1) + "%</b></div>" : ""),
+    }));
+  charts.donutChart($("#donutMount"), {
+    items: donutItems,
+    centerSales: data.fmtMoney(total),
+    centerTx: t("kpi_transactions") + " " + data.fmtInt(num(d.kpis.transactions)),
+    emptyText: t("t_no_revenue"),
+    ariaLabel: t("sec_revenue"),
+  });
+
+  // Ranked list (all 5 sources, even zero)
+  const maxV = Math.max(1, ...items.map((x) => x.value));
+  const rows = items
+    .slice()
+    .sort((a, b) => b.value - a.value)
+    .map((x) =>
+      '<li class="rev-row">' +
+      '<span class="lb-dot" style="background:' + themes.colorForRevenue(x.key) + '"></span>' +
+      '<span class="rev-name">' + esc(i18n.revLabel(x.key)) + "</span>" +
+      '<span class="rev-bar"><span style="width:' + ((x.value / maxV) * 100).toFixed(1) + '%;background:' + themes.colorForRevenue(x.key) + '"></span></span>' +
+      '<span class="rev-val tabular">' + data.fmtMoney(x.value) + "</span>" +
+      '<span class="rev-pct tabular">' + x.pct.toFixed(1) + "%</span>" +
+      "</li>"
+    ).join("");
+  const totalRow =
+    '<li class="rev-row total">' +
+    '<span class="rev-name"><b>' + t("t_ann_total") + "</b></span>" +
+    '<span class="rev-val tabular"><b>' + data.fmtMoney(total) + "</b></span>" +
+    '<span class="rev-pct tabular"><b>100%</b></span></li>';
+
+  setHtmlIfChanged("revList", '<ul class="rev-rows">' + rows + totalRow + "</ul>");
+
+  const partial = $("#revenuePartial");
+  if (partial) {
+    const show = !!(d.revenue && d.revenue.partial);
+    partial.hidden = !show;
+    if (show) partial.innerHTML = icon("alert", 14) + " " + t("t_revenue_partial");
+  }
+
+  // Empty state (only when there is nothing to chart at all)
+  const emptyEl = $("#revenueEmpty");
+  if (emptyEl) {
+    const isEmpty = total <= 0;
+    emptyEl.hidden = !isEmpty;
+    if (isEmpty) emptyEl.textContent = t("t_no_revenue");
+  }
+}
+
+// ----------------------------------------------------------
+// Monthly bars + annual report
+// ----------------------------------------------------------
+function renderMonthly(d) {
+  const rows = (d.monthly || []).map((r, i) => {
+    const isCur = i === state.month - 1;
+    const pace = isCur && isCurrentRealMonth() && r.target > 0
+      ? (r.target * new Date().getDate()) / daysInMonth(state.year, state.month)
+      : null;
+    return {
+      label: MONTHS_SHORT[i],
+      actual: num(r.sales),
+      target: num(r.target),
+      pace,
+      tip:
+        '<div class="tt-row"><span>' + i18n.monthName(i + 1) + "</span></div>" +
+        '<div class="tt-row"><span>' + t("t_ann_actual") + "</span><b>" + data.fmtMoney(r.sales) + "</b></div>" +
+        '<div class="tt-row"><span>' + t("t_ann_target") + "</span><b>" + data.fmtMoney(r.target) + "</b></div>" +
+        (pace != null
+          ? '<div class="tt-row"><span>' + t("kpi_pace", { v: data.fmtMoney(Math.round(pace)) }) + "</span></div>"
+          : ""),
     };
-    charts.donut($("#revenueChart"), {
-      data: ordered.map((k) => ({
-        label: i18n.revLabel(k),
-        value: sources[k],
-        color: colorMap[k],
-      })),
-    });
+  });
+  charts.barsChart($("#monthlyChart"), {
+    rows,
+    fmtY: data.fmtKD,
+    emptyText: t("t_no_data"),
+  });
+  const note = $("#monthlyNote");
+  if (note) note.textContent = String(state.year);
+  const legend = $("#monthlyLegend");
+  if (legend) {
+    legend.innerHTML =
+      '<span class="item"><span class="swatch" style="background:var(--brand-line)"></span>' + t("t_legend_actual") + "</span>" +
+      '<span class="item"><span class="swatch target"></span>' + t("t_legend_target") + "</span>";
   }
+}
 
-  // ----------------------------------------------------------
-  // Units
-  // ----------------------------------------------------------
-  function renderUnits(d) {
-    if (!d) return;
-    const units = filterUnitsForBranch(d);
-    $("#unitNote").textContent = t("t_units", { n: units.length });
-    const grid = $("#unitsGrid");
-    grid.innerHTML = units.map((u) => {
-      const a = Number(u.achievement || 0);
-      const width = Math.min(a, 100);
-      const status = (u.status || "unknown").toLowerCase();
-      const statusClass = status === "online" ? "" : "off";
-      return `<div class="unit">
-        <div class="unit-head">
-          <div class="unit-name">${u.name}</div>
-          <div class="unit-status ${statusClass}">${status}</div>
-        </div>
-        <div class="unit-sales">${fmtMoney(u.sales)}</div>
-        <div class="bar"><span style="width:${width}%"></span></div>
-        <div class="unit-meta">
-          <span>${t("t_target", { v: fmtMoney(u.target) })}</span>
-          <span>${fmtPct(a)}</span>
-        </div>
-        <div class="unit-meta">
-          <span>${u.transactions} ${t("kpi_transactions").toLowerCase()}</span>
-          <span>${t("t_avg", { v: fmtMoney(u.average_transaction) })}</span>
-        </div>
-      </div>`;
-    }).join("");
+function annualRowClass(pct, target) {
+  if (target <= 0) return "";
+  if (pct >= 100) return "good"; // hit or exceed
+  if (pct < 40) return "bad";
+  if (pct < 80) return "warn";
+  return ""; // 80–99.99% → neutral
+}
+
+function renderAnnual(d) {
+  const rows = d.monthly || [];
+  const body = rows.map((r, i) => {
+    const actual = num(r.sales);
+    const target = num(r.target);
+    const pct = target > 0 ? (actual / target) * 100 : 0;
+    const remaining = Math.max(target - actual, 0);
+    const cls = annualRowClass(pct, target);
+    const barW = Math.min(pct, 100);
+    return (
+      "<tr>" +
+      '<td class="sticky-col">' + i18n.monthName(i + 1) + "</td>" +
+      '<td class="right tabular">' + data.fmtMoney(actual) + "</td>" +
+      '<td class="right tabular">' + (target > 0 ? data.fmtMoney(target) : '<span class="muted">—</span>') + "</td>" +
+      '<td class="right"><div class="ach-cell"><span class="tabular ' + cls + '">' + (target > 0 ? data.fmtPct(pct) : "—") + "</span>" +
+      '<span class="pbar' + (cls ? " " + cls : "") + '"><i style="width:' + barW.toFixed(1) + '%"></i></span></div></td>' +
+      '<td class="right tabular">' + (target > 0 ? data.fmtMoney(remaining) : '<span class="muted">—</span>') + "</td>" +
+      "</tr>"
+    );
+  }).join("");
+
+  const totActual = rows.reduce((s, r) => s + num(r.sales), 0);
+  const totTarget = rows.reduce((s, r) => s + num(r.target), 0);
+  const totPct = totTarget > 0 ? (totActual / totTarget) * 100 : 0;
+  const totCls = annualRowClass(totPct, totTarget);
+  const totalRow =
+    "<tr>" +
+    '<td class="sticky-col"><b>' + t("t_ann_total") + "</b></td>" +
+    '<td class="right tabular"><b>' + data.fmtMoney(totActual) + "</b></td>" +
+    '<td class="right tabular"><b>' + data.fmtMoney(totTarget) + "</b></td>" +
+    '<td class="right"><div class="ach-cell"><span class="tabular ' + totCls + '"><b>' + data.fmtPct(totPct) + "</b></span>" +
+    '<span class="pbar' + (totCls ? " " + totCls : "") + '"><i style="width:' + Math.min(totPct, 100).toFixed(1) + '%"></i></span></div></td>' +
+    '<td class="right tabular"><b>' + data.fmtMoney(Math.max(totTarget - totActual, 0)) + "</b></td>" +
+    "</tr>";
+
+  setHtmlIfChanged("annualTbody", body + totalRow);
+  const note = $("#annualNote");
+  if (note) note.textContent = String(state.year);
+  const title = $("#annualTitle");
+  if (title) title.textContent = annualTitle();
+}
+
+// ----------------------------------------------------------
+// Unit cards
+// ----------------------------------------------------------
+function renderUnits(d) {
+  const units = d.sales_units || [];
+  const note = $("#unitNote");
+  if (note) {
+    note.textContent = t("t_units", { n: units.filter((u) => !u.is_pending).length });
   }
+  const html = units.map((u) => {
+    const ach = num(u.achievement_pct);
+    const cls = u.is_pending ? "" : annualRowClass(ach, num(u.target));
+    return (
+      '<div class="unit' + (u.is_pending ? " pending" : "") + '" data-code="' + u.code + '">' +
+      '<div class="unit-head"><span class="unit-name">' + esc(branchName(u)) +
+      (u.is_pending ? ' <span class="pend-badge">' + t("pending_badge") + "</span>" : "") + "</span>" +
+      '<span class="unit-status' + (u.status !== "online" ? " off" : "") + '">' + esc(u.status) + "</span></div>" +
+      '<div class="unit-sales tabular">' + (u.is_pending ? "—" : data.fmtMoney(u.sales)) + "</div>" +
+      '<div class="bar"><span class="' + cls + '" style="width:' + Math.min(ach, 100).toFixed(1) + '%"></span></div>' +
+      '<div class="unit-meta"><span>' + t("t_target", { v: u.is_pending || num(u.target) > 0 ? data.fmtMoney(u.target) : "—" }) + "</span>" +
+      '<span class="tabular ' + cls + '">' + (u.is_pending || num(u.target) > 0 ? data.fmtPct(ach) : "—") + "</span></div>" +
+      '<div class="unit-meta"><span>' + t("t_transactions", { n: data.fmtInt(u.transactions) }) + "</span>" +
+      "<span>" + (u.customers == null ? "—" : t("t_customers", { n: data.fmtInt(u.customers) })) + "</span></div>" +
+      "</div>"
+    );
+  }).join("");
+  setHtmlIfChanged("unitsGrid", html);
+  const pnote = $("#pendingNote");
+  if (pnote) pnote.textContent = pendingUnits(d).length ? t("pending_note") : "";
+}
 
-  // ----------------------------------------------------------
-  // Main render
-  // ----------------------------------------------------------
-  let lastData = null;
-
-  function rerenderChartsFromCache() {
-    if (!lastData) return;
-    renderAll(lastData, true);
-  }
-
-  function renderAll(d, fromCache) {
-    lastData = d;
-    savePreviousPeriodSnapshot(d.kpis.sales, d.kpis.transactions);
-    $("#periodLabel").textContent = periodLabelText();
-    $("#kpiGrid").innerHTML = kpiCards(d);
-    renderTrend(d);
-    renderRanking(d);
-    renderRevenue(d);
-    renderMonthly(d);
-    renderUnits(d);
-  }
-
-  // ----------------------------------------------------------
-  // Data loader
-  // ----------------------------------------------------------
-  async function load() {
-    setStatus("syncing", t("status_syncing"));
-    state.syncing = true;
-    inflightToken += 1;
-    const myToken = inflightToken;
-
-    // Skeletons on cold load
-    if (!lastData) {
-      $("#kpiGrid").innerHTML = skeletonKpis();
-      $("#rankingList").innerHTML = skeletonRow() + skeletonRow() + skeletonRow();
-      $("#revenueGrid").innerHTML = skeletonRow();
-      $("#unitsGrid").innerHTML = skeletonRow() + skeletonRow();
-      $("#annualTbody").innerHTML = skeletonTable();
-    }
-
-    // Parallel: dashboard + branches + health
-    const [dashRes, brRes, health] = await Promise.all([
-      data.getDashboard(state.year, state.month).catch((e) => ({ error: e })),
-      data.getBranches().catch((e) => ({ error: e })),
-      data.getHealth(),
-    ]);
-
-    // If a newer load started, drop this one
-    if (myToken !== inflightToken) return;
-
-    if (dashRes.error || !dashRes.data) {
-      // Show cached if we have any
-      if (lastData) {
-        setStatus("offline", t("status_offline"));
-        $("#errorSlot").innerHTML = widgetError(t("t_offline_msg") + " — " + (dashRes.error && dashRes.error.message ? dashRes.error.message : ""));
-        widgetRetry($("#errorSlot"), load);
-      } else {
-        setStatus("offline", t("status_offline"));
-        $("#kpiGrid").innerHTML = widgetError(t("t_offline_msg"));
-        widgetRetry($("#kpiGrid"), load);
-        $("#errorSlot").innerHTML = "";
+// ----------------------------------------------------------
+// Confetti micro-celebration (once per branch per session)
+// ----------------------------------------------------------
+function checkCelebrations(d) {
+  if (charts.isReducedMotion() || bfcacheRestore) return;
+  activeUnits(d).forEach((u) => {
+    if (num(u.achievement_pct) >= 100 && !celebrated.has(u.code)) {
+      celebrated.add(u.code);
+      const card = document.querySelector('.unit[data-code="' + u.code + '"]');
+      if (card) {
+        const r = card.getBoundingClientRect();
+        burstAt(r.left + r.width / 2, r.top + 24, [
+          themes.branchAccent(u.code),
+          themes.colorForRevenue("RECEIPT"),
+          themes.colorForRevenue("PERSONAL"),
+          "#C9A24B",
+        ]);
       }
-      state.syncing = false;
-      return;
     }
+  });
+}
 
-    if (brRes && brRes.data && brRes.data.branches && !$("#branchSelect").options.length) {
-      buildBranchSelector(brRes.data.branches);
+// ----------------------------------------------------------
+// Master render
+// ----------------------------------------------------------
+let firstRenderDone = false;
+
+function renderAll(result) {
+  state.lastResult = result;
+  state.lastData = result.data;
+
+  $("#periodLabel").textContent = periodLabel();
+  renderKpis(result);
+  renderTrend(result);
+  renderRanking(result.data);
+  renderRevenue(result);
+  renderMonthly(result.data);
+  renderAnnual(result.data);
+  renderUnits(result.data);
+  checkCelebrations(result.data);
+
+  // Defer non-critical work to idle time to avoid blocking the main thread
+  if (!firstRenderDone) {
+    firstRenderDone = true;
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => {
+        // Warm up chart laziness, etc.
+      }, { timeout: 2000 });
     }
-
-    state.lastSync = new Date();
-    setStatus(health && health.ok ? "online" : "syncing", health && health.ok ? `${t("status_online")} · ${state.lastSync.toLocaleTimeString()}` : t("status_syncing"));
-    $("#errorSlot").innerHTML = "";
-    renderAll(dashRes.data, !!dashRes.isFresh === false);
-    state.syncing = false;
-
-    // Best-effort idle prefetch of adjacent months
-    const others = [state.month - 1, state.month + 1].filter((m) => m >= 1 && m <= 12);
-    data.idlePrefetch(state.year, state.month, others);
   }
+}
 
-  // ----------------------------------------------------------
-  // Icons: hydrate every [data-icon] element
-  // ----------------------------------------------------------
-  function hydrateIcons() {
-    $$("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon, 18); });
-  }
+function rerenderFromCache() {
+  if (state.lastResult) renderAll(state.lastResult);
+  else charts.redrawAll();
+}
 
-  // ----------------------------------------------------------
-  // Language toggle
-  // ----------------------------------------------------------
-  function wireLang() {
-    const btn = $("#langToggle");
-    btn.addEventListener("click", () => {
-      const next = i18n.getLang() === "en" ? "ar" : "en";
-      i18n.setLang(next);
-      $("#langToggleText").textContent = i18n.getLang() === "en" ? "العربية" : "English";
-      rerenderChartsFromCache();
+// ----------------------------------------------------------
+// Branch selection
+// ----------------------------------------------------------
+function selectBranch(code) {
+  if (!code) return;
+  state.branch = code;
+  branchLb.setValue(code, true);
+  themes.applyBranchTheme(code);
+  document.title = (code === "all" ? t("all_branches") : branchLabelFor(code)) + " · " + t("app_title");
+  rerenderFromCache();
+}
+
+function branchLabelFor(code) {
+  const b = themes.getBranch(code);
+  return i18n.getLang() === "ar" ? b.name_ar : b.name_en;
+}
+
+// ----------------------------------------------------------
+// Data loading
+// ----------------------------------------------------------
+let loading = false;
+
+async function load() {
+  if (loading) return;
+  loading = true;
+  setStatus("syncing", t("status_syncing"));
+  const spin = $("#refreshBtn svg");
+  if (spin) spin.classList.add("spin");
+
+  try {
+    const result = await data.getDashboard(state.year, state.month, {
+      force: false,
+      onPartial: (key, val) => {
+        // Streaming paint: show the headline numbers as soon as
+        // the kpis object has fully arrived.
+        if (key === "kpis" && val && state.branch === "all") {
+          const el = document.getElementById("kpiSales");
+          if (el && lastHtml.has("kpiGrid")) {
+            el.textContent = data.fmtMoney(num(val.sales));
+          }
+        }
+      },
     });
-    i18n.onChange(() => {
-      // Re-apply all i18n-able attributes
-      $$("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
-      // Refresh dynamic bits
-      if (lastData) rerenderChartsFromCache();
+    setDemoMode(!!result.demo);
+    renderAll(result);
+    data.idlePrefetch(state.year, state.month);
+
+    const health = await data.getHealth();
+    if (health.ok) setStatus("online", t("status_online"));
+    else setStatus("offline", t("status_offline"));
+  } catch (err) {
+    // Only reachable if even the demo payload failed to build.
+    setStatus("offline", t("status_offline"));
+    setHtmlIfChanged("errorSlot",
+      '<div class="error-box">' + icon("alert", 18) + " " + t("t_offline_msg") +
+      ' <button type="button" data-retry="1">' + t("action_retry") + "</button></div>");
+    const btn = document.querySelector("#errorSlot [data-retry]");
+    if (btn) btn.addEventListener("click", load);
+  } finally {
+    loading = false;
+    const spin2 = $("#refreshBtn svg");
+    if (spin2) spin2.classList.remove("spin");
+  }
+}
+
+// ----------------------------------------------------------
+// Filters / navigation
+// ----------------------------------------------------------
+function buildBranchListbox() {
+  const btn = $("#branchListbox");
+  if (!btn) return;
+  const options = [
+    {
+      value: "all",
+      label: t("all_branches"),
+      dot: themes.branchAccent("all"),
+      badge: "",
+    },
+  ].concat(
+    themes.BRANCHES.map((b) => ({
+      value: b.code,
+      label: i18n.getLang() === "ar" ? b.name_ar : b.name_en,
+      dot: themes.branchAccent(b.code),
+      badge: b.pending ? t("pending_badge") : "",
+    }))
+  );
+  branchLb = createListbox(btn, {
+    options,
+    value: "all",
+    placeholder: t("filter_branch"),
+    onAriaLabel: (sel) => t("filter_branch") + ": " + (sel ? sel.label : ""),
+    onChange: (v) => selectBranch(v),
+  });
+}
+
+// ----------------------------------------------------------
+// Header controls + keyboard
+// ----------------------------------------------------------
+function wireHeader() {
+  const themeBtn = $("#theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      themes.toggleColorMode();
+      syncThemeButton();
+      themes.applyBranchTheme(state.branch);
+      rerenderFromCache();
     });
   }
-
-  // ----------------------------------------------------------
-  // Refresh button
-  // ----------------------------------------------------------
-  function wireRefresh() {
-    const btn = $("#refreshBtn");
-    btn.addEventListener("click", () => {
-      const svg = btn.querySelector("svg");
-      if (svg) svg.classList.add("spin");
-      load().finally(() => { if (svg) svg.classList.remove("spin"); });
+  const langBtn = $("#langToggle");
+  if (langBtn) {
+    langBtn.addEventListener("click", () => {
+      i18n.setLang(i18n.getLang() === "en" ? "ar" : "en");
     });
   }
+  const refreshBtn = $("#refreshBtn");
+  if (refreshBtn) refreshBtn.addEventListener("click", () => load());
+}
 
-  // ----------------------------------------------------------
-  // Keyboard shortcuts
-  // ----------------------------------------------------------
-  function wireShortcuts() {
-    document.addEventListener("keydown", (e) => {
-      if (e.target && /input|select|textarea/i.test(e.target.tagName)) return;
-      if (e.key === "r" || e.key === "R") { e.preventDefault(); $("#refreshBtn").click(); }
-      if (e.key === "b" || e.key === "B") { e.preventDefault(); $('[data-action="toggle-sidebar"]').click(); }
-      if (e.key === "/") { e.preventDefault(); $("#branchSelect").focus(); }
-    });
-  }
+function syncThemeButton() {
+  const btn = $("#theme-toggle");
+  if (!btn) return;
+  const ic = btn.querySelector("[data-icon]");
+  if (!ic) return;
+  ic.dataset.icon = themes.getColorMode() === "dark" ? "sun" : "moon";
+  ic.innerHTML = icon(ic.dataset.icon, 18);
+  btn.setAttribute("aria-label", t("theme_toggle_label") + " (" + (themes.getColorMode() === "dark" ? "dark" : "light") + ")");
+}
 
-  // ----------------------------------------------------------
-  // Auto-refresh every 60s (silent, no skeletons)
-  // ----------------------------------------------------------
-  function wireAutoRefresh() {
-    setInterval(() => {
-      if (document.hidden) return;
-      load();
-    }, 60_000);
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden && state.lastSync && (Date.now() - state.lastSync.getTime() > 90_000)) {
-        load();
-      }
-    });
-  }
+function wireShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    const tag = e.target && e.target.tagName;
+    if (/input|textarea|select/i.test(tag || "")) return;
+    if (e.target && e.target.isContentEditable) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "r") { e.preventDefault(); load(); }
+    else if (k === "b") { e.preventDefault(); if (branchLb) { branchLb.toggle(); branchLb.focus(); } }
+    else if (k === "t") { e.preventDefault(); const b = $("#theme-toggle"); if (b) b.click(); }
+    else if (k === "l") { e.preventDefault(); const b = $("#langToggle"); if (b) b.click(); }
+  });
+}
 
-  // ----------------------------------------------------------
-  // Boot
-  // ----------------------------------------------------------
-  function boot() {
-    // 1. Hydrate inline icon placeholders
-    hydrateIcons();
-    // 2. Apply default theme
-    applyThemeForBranch(state.branch);
-    // 3. Build year/month selectors
-    buildYearMonthSelectors();
-    // 4. Wire filter chips + dates
-    wirePresets();
-    // 5. Wire language + refresh
-    wireLang();
-    wireRefresh();
-    // 6. Wire sidebar
-    sidebar.init({ onNav: () => { /* future routing hook */ } });
-    // 7. Wire keyboard shortcuts
-    wireShortcuts();
-    // 8. First load
+function wireLanguageChange() {
+  i18n.onChange(() => {
+    // Re-translate static nodes.
+    $$("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+    const langBtnText = $("#langToggleText");
+    if (langBtnText) langBtnText.textContent = t("lang_switch_label");
+    // Rebuild dynamic option labels.
+    if (branchLb) {
+      branchLb.setOptions(
+        [{ value: "all", label: t("all_branches"), dot: themes.branchAccent("all"), badge: "" }].concat(
+          themes.BRANCHES.map((b) => ({
+            value: b.code,
+            label: i18n.getLang() === "ar" ? b.name_ar : b.name_en,
+            dot: themes.branchAccent(b.code),
+            badge: b.pending ? t("pending_badge") : "",
+          }))
+        ),
+        true
+      );
+    }
+    syncThemeButton();
+    if (state.lastResult) renderAll(state.lastResult);
+    else charts.redrawAll();
+  });
+}
+
+function wireAutoRefresh() {
+  setInterval(() => {
+    if (document.hidden) return;
     load();
-    // 9. Auto-refresh
-    wireAutoRefresh();
-    // 10. Dev-only timing hook
-    if (window.__ICH_DEV__) {
-      setInterval(() => {
-        const t = data.devTimings();
-        console.debug("[ICH] cache", t);
-      }, 5000);
+  }, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) load();
+  }, { passive: true });
+  // Back/forward cache restore: skip entry animations once.
+  window.addEventListener("pageshow", (e) => {
+    if (e.persisted) {
+      bfcacheRestore = true;
+      charts.setSkipAnimationsOnce();
+      if (state.lastResult) renderAll(state.lastResult);
+      // Next load animates normally again.
+      setTimeout(() => { bfcacheRestore = false; }, 600);
     }
-  }
+  }, { passive: true });
+}
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
-})();
+// ----------------------------------------------------------
+// Lazy chart registration
+// ----------------------------------------------------------
+function registerCharts() {
+  const daily = $("#dailyChart");
+  if (daily) charts.lazyDraw(daily, () => state.lastResult && renderTrend(state.lastResult));
+  const monthly = $("#monthlyChart");
+  if (monthly) charts.lazyDraw(monthly, () => state.lastData && renderMonthly(state.lastData));
+}
+
+// ----------------------------------------------------------
+// Boot
+// ----------------------------------------------------------
+function boot() {
+  themes.initThemes();
+  i18n.initLang();
+  themes.applyBranchTheme("all");
+  hydrateIcons();
+
+  initSidebar({});
+  buildBranchListbox();
+  wireTrendModes();
+  wireHeader();
+  syncThemeButton();
+  wireLanguageChange();
+  wireShortcuts();
+  wireAutoRefresh();
+  registerCharts();
+
+  const langBtnText = $("#langToggleText");
+  if (langBtnText) langBtnText.textContent = t("lang_switch_label");
+
+  load();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}

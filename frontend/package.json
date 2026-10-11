@@ -1,1 +1,13 @@
-{"scripts":{"start":"python -m http.server 8060"}}
+{
+  "name": "ich-all-branches-dashboard",
+  "version": "3.0.0",
+  "private": true,
+  "description": "ICH All-Branches Sales Dashboard — Force Holding Co (frontend)",
+  "scripts": {
+    "build": "esbuild app.js --bundle --minify --target=es2020 --format=iife --outfile=app.bundle.js",
+    "start": "python -m http.server 8060"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

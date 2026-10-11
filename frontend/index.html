@@ -1,26 +1,462 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="all">
+<html lang="en" dir="ltr" data-color-mode="dark" data-sidebar="expanded">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="dark light" />
   <meta name="theme-color" content="#0B0F23" />
   <meta name="description" content="ICH — All Branches Sales Dashboard for Force Holding Co." />
+  <link rel="icon" href="data:," />
   <title>ICH — All Branches Sales Dashboard</title>
 
-  <!-- Inter + Cairo (Arabic) from a stable CDN; falls back gracefully if blocked -->
+  <!-- ============================================================
+       No-FOIT boot: compute color mode, language, direction and
+       sidebar state from localStorage / system preference BEFORE
+       the body parses. Synchronous, ~0.4KB.
+       ============================================================ -->
+  <script>
+    (function () {
+      try {
+        var mode = localStorage.getItem("ich.colorMode");
+        if (mode !== "dark" && mode !== "light") {
+          mode = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        document.documentElement.setAttribute("data-color-mode", mode);
+        var lang = localStorage.getItem("ich.lang");
+        if (lang === "ar") {
+          document.documentElement.setAttribute("lang", "ar");
+          document.documentElement.setAttribute("dir", "rtl");
+        }
+        var sb = localStorage.getItem("ich.sidebar");
+        if (sb) {
+          try {
+            var parsed = JSON.parse(sb);
+            if (parsed && (parsed.mode === "expanded" || parsed.mode === "collapsed")) {
+              document.documentElement.setAttribute("data-sidebar", parsed.mode);
+            }
+          } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* private mode */ }
+    })();
+  </script>
+
+  <!-- ============================================================
+       Fonts: IBM Plex Sans Arabic + Cairo + Inter, 400/500/600/700
+       only, display=swap, preconnect + preload. No-FOIT.
+       ============================================================ -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;600;700;800&display=swap"
+    rel="preload"
+    as="style"
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=optional"
   />
+  <link
+    rel="stylesheet"
+    media="print"
+    onload="this.media='all'"
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=optional"
+  />
+  <noscript>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=optional"
+    />
+  </noscript>
 
-  <link rel="stylesheet" href="styles.css" />
+  <!-- ============================================================
+       Critical (above-the-fold) CSS — inlined. Non-critical
+       component CSS is deferred via styles.css below.
+       ============================================================ -->
+  <style>
+    :root {
+      --font-main: "Inter", "IBM Plex Sans Arabic", "Cairo", system-ui, "Segoe UI", sans-serif;
+      --radius: 14px;
+      --radius-sm: 9px;
+      --sidebar-w: 264px;
+      --sidebar-w-collapsed: 76px;
+      --rev-0: #5B8DEF; --rev-1: #A78BFA; --rev-2: #E8B15C; --rev-3: #45C4B0;
+      --rev-4: #E07A9A; --rev-5: #5BC8E8; --rev-6: #C9A24B; --rev-7: #95A3C4;
+      --brand-accent: #C9A24B;
+      --brand-line: #7C3AED;
+      --brand-fill: rgba(124, 58, 237, 0.16);
+      --brand-gradient: linear-gradient(135deg, rgba(201,162,75,0.16) 0%, rgba(124,58,237,0.10) 50%, rgba(20,184,166,0.14) 100%);
+      --brand-glow: rgba(124, 58, 237, 0.35);
+    }
+    :root[data-color-mode="dark"] {
+      color-scheme: dark;
+      --bg: #0B0F23;
+      --bg-2: #070A18;
+      --panel: #121735;
+      --panel-2: #171E42;
+      --text-1: #E8ECF7;
+      --text-2: #A6ADCC;
+      --text-3: #7A82A6;
+      --border: rgba(148, 160, 190, 0.16);
+      --grid-line: rgba(148, 160, 190, 0.13);
+      --axis-line: rgba(148, 160, 190, 0.35);
+      --target-fill: rgba(148, 160, 190, 0.22);
+      --ok: #3ECF8E;
+      --warn: #E2B155;
+      --bad: #F2657A;
+      --shadow: 0 10px 30px rgba(3, 6, 20, 0.45);
+      --hm-0: rgba(255,255,255,0.07);
+      --hm-1: #232B58; --hm-2: #39437F; --hm-3: #565FA8; --hm-4: #7B84D6;
+      --skeleton: rgba(148, 160, 190, 0.14);
+      --skeleton-hi: rgba(148, 160, 190, 0.24);
+    }
+    :root[data-color-mode="light"] {
+      color-scheme: light;
+      --bg: #F3F5FA;
+      --bg-2: #EAEEF7;
+      --panel: #FFFFFF;
+      --panel-2: #EEF1F8;
+      --text-1: #171C33;
+      --text-2: #455072;
+      --text-3: #5D6788;
+      --border: rgba(23, 28, 51, 0.13);
+      --grid-line: rgba(23, 28, 51, 0.10);
+      --axis-line: rgba(23, 28, 51, 0.30);
+      --target-fill: rgba(23, 28, 51, 0.12);
+      --ok: #0E7A44;
+      --warn: #8A6116;
+      --bad: #C2334D;
+      --shadow: 0 10px 26px rgba(23, 28, 51, 0.10);
+      --hm-0: #E8ECF7;
+      --hm-1: #C4CCEA; --hm-2: #9AA6D8; --hm-3: #6E7CC4; --hm-4: #4A5AA8;
+      --skeleton: rgba(23, 28, 51, 0.08);
+      --skeleton-hi: rgba(23, 28, 51, 0.15);
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font-main);
+      background: var(--bg);
+      color: var(--text-1);
+      font-size: 14.5px;
+      line-height: 1.45;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+    }
+    [dir="rtl"] body { font-size: 15px; }
+    /* Arabic readability: Plex Arabic first, larger type, airier lines */
+    html[lang="ar"] body {
+      font-family: "IBM Plex Sans Arabic", "Cairo", "Inter", system-ui, "Segoe UI", sans-serif;
+      font-size: 15.5px;
+      line-height: 1.68;
+    }
+    html[lang="ar"] .title-block h1 { font-size: 17px; font-weight: 700; }
+    html[lang="ar"] .kpi-label { font-size: 12.5px; }
+    html[lang="ar"] .section-title { font-size: 15px; font-weight: 700; }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; touch-action: manipulation; background: none; border: 0; padding: 0; }
+    :focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 4px; }
+    svg { vertical-align: middle; }
+    .tabular { font-variant-numeric: tabular-nums; }
+
+    /* ---------- Scrollbar (8px, theme-aware) ---------- */
+    * { scrollbar-width: thin; scrollbar-color: var(--axis-line) transparent; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--axis-line); border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+    /* ---------- App layout ---------- */
+    .app {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      min-height: 100dvh;
+    }
+    :root[data-sidebar="collapsed"] .app { grid-template-columns: var(--sidebar-w-collapsed) 1fr; }
+    .main { min-width: 0; display: flex; flex-direction: column; }
+
+    /* ---------- Sidebar ---------- */
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 18px 14px;
+      background: var(--bg-2);
+      border-inline-end: 1px solid var(--border);
+      overflow-y: auto;
+      transition: width 0.22s ease;
+      z-index: 40;
+    }
+    .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 14px; }
+    .brand-mark {
+      width: 38px; height: 38px; border-radius: 11px; flex: none;
+      display: grid; place-items: center;
+      font-weight: 700; font-size: 14px; color: #0B0F1A;
+      background: linear-gradient(135deg, #C9A24B, #7C3AED 60%, #14B8A6);
+    }
+    .brand-text b { display: block; font-size: 14.5px; }
+    .brand-text small { color: var(--text-3); font-size: 11.5px; display: flex; align-items: center; gap: 6px; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+    .live-dot.off { background: var(--bad); }
+    .nav { display: flex; flex-direction: column; gap: 2px; }
+    .nav-section-title {
+      font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-3); padding: 12px 10px 4px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px; border-radius: var(--radius-sm);
+      color: var(--text-2); text-align: start; width: 100%;
+      min-height: 44px;
+    }
+    .nav-item:hover { background: var(--panel-2); color: var(--text-1); }
+    .nav-item.active { background: var(--panel-2); color: var(--text-1); box-shadow: inset 2px 0 0 var(--brand-accent); }
+    :root[data-sidebar="collapsed"] .nav-label,
+    :root[data-sidebar="collapsed"] .nav-section-title,
+    :root[data-sidebar="collapsed"] .brand-text { display: none; }
+    .sidebar-foot { margin-top: auto; padding: 10px; color: var(--text-3); font-size: 11px; }
+    .sidebar-overlay {
+      position: fixed; inset: 0; background: rgba(4, 6, 18, 0.55);
+      opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 45;
+    }
+
+    /* ---------- Header (glass) ---------- */
+    .header {
+      position: sticky; top: 0; z-index: 30;
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 18px;
+      background: color-mix(in srgb, var(--bg) 78%, transparent);
+      -webkit-backdrop-filter: blur(12px) saturate(180%);
+      backdrop-filter: blur(12px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      min-height: 58px;
+    }
+    @media (max-width: 768px) {
+      .header { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg); }
+    }
+    @media (prefers-reduced-transparency: reduce) {
+      .header { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg); }
+    }
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; border-radius: 10px;
+      border: 1px solid var(--border); color: var(--text-2);
+      background: var(--panel);
+    }
+    .icon-btn:hover { color: var(--text-1); border-color: var(--axis-line); }
+    .title-block { min-width: 0; }
+    .title-block h1 { font-size: 16.5px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .subtitle { color: var(--text-3); font-size: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .header-actions { margin-inline-start: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .status-pill, .pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 12px; font-weight: 500;
+      padding: 7px 12px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel); color: var(--text-2);
+    }
+    .status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+    .status-pill.syncing .dot { background: var(--warn); }
+    .status-pill.offline .dot { background: var(--bad); }
+    .status-pill.demo, #demoPill { border-style: dashed; color: var(--text-3); }
+    #demoPill .dot { background: var(--text-3); }
+
+    .refresh-btn, .lang-toggle, #theme-toggle {
+      display: inline-flex; align-items: center; gap: 8px;
+      min-height: 40px; padding: 0 14px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--panel); color: var(--text-2);
+    }
+    .refresh-btn:hover, .lang-toggle:hover, #theme-toggle:hover { color: var(--text-1); border-color: var(--axis-line); }
+    .spin { animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---------- Content + sections ---------- */
+    .content { padding: 18px; display: flex; flex-direction: column; gap: 18px; max-width: 1560px; width: 100%; margin: 0 auto; }
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      contain: layout style paint;
+    }
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 14px 16px 0; flex-wrap: wrap;
+    }
+    .section-title { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14.5px; }
+    .section-title .icon-wrap { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand-gradient); color: var(--brand-accent); }
+    .section-note { color: var(--text-3); font-size: 12px; }
+    .section-body { padding: 14px 16px 16px; }
+    .section-body.flush { padding: 0; }
+
+    /* ---------- Filters ---------- */
+    .filters {
+      display: flex; align-items: end; gap: 14px; flex-wrap: wrap;
+      padding: 14px 16px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); contain: layout style;
+    }
+    .filter { display: flex; flex-direction: column; gap: 6px; }
+    .filter > label { font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; }
+    .filter-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      min-height: 38px; padding: 0 13px; border-radius: 999px;
+      border: 1px solid var(--border); color: var(--text-2);
+      background: var(--panel-2); font-size: 12.5px;
+      touch-action: manipulation;
+    }
+    .chip:hover { color: var(--text-1); }
+    .chip.active { background: var(--brand-gradient); border-color: var(--brand-accent); color: var(--text-1); font-weight: 600; }
+    input[type="date"] {
+      min-height: 38px; padding: 0 10px; border-radius: 9px;
+      border: 1px solid var(--border); background: var(--panel-2); color: var(--text-1);
+    }
+
+    /* ---------- Listbox (custom, NOT <select>) ---------- */
+    .listbox-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      min-height: 40px; padding: 0 12px; width: 232px;
+      border-radius: 10px; border: 1px solid var(--border);
+      background: var(--panel-2); color: var(--text-1); text-align: start;
+    }
+    .listbox-btn:hover, .listbox-btn[aria-expanded="true"] { border-color: var(--brand-accent); }
+    .lb-label { display: inline-flex; align-items: center; gap: 8px; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .lb-chev { color: var(--text-3); flex: none; }
+    .lb-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+    .lb-dot.big { width: 13px; height: 13px; }
+    .lb-badge { font-size: 10.5px; color: var(--text-3); font-weight: 500; }
+    .lb-popup {
+      position: fixed; z-index: 60; margin: 0; padding: 6px;
+      list-style: none; max-height: 320px; overflow-y: auto;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; box-shadow: var(--shadow);
+    }
+    .lb-popup[hidden] { display: none; }
+    .lb-popup li {
+      display: flex; align-items: center; gap: 9px;
+      padding: 10px 12px; border-radius: 8px; cursor: pointer;
+      color: var(--text-2); min-height: 42px;
+    }
+    .lb-popup li:hover, .lb-popup li.active { background: var(--panel-2); color: var(--text-1); }
+    .lb-popup li[aria-selected="true"] { color: var(--text-1); font-weight: 600; box-shadow: inset 2px 0 0 var(--brand-accent); }
+
+    /* ---------- KPI grid + skeleton shimmer ---------- */
+    .kpi-grid {
+      display: grid; gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+      contain: layout style paint;
+    }
+    .kpi {
+      position: relative; overflow: hidden;
+      background: var(--panel);
+      background-image: var(--brand-gradient);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px 12px;
+      contain: layout style paint;
+      contain-intrinsic-size: auto 120px;
+    }
+    .kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .kpi-label { font-size: 12px; color: var(--text-2); font-weight: 500; }
+    .kpi-icon { color: var(--brand-accent); opacity: 0.9; }
+    .kpi-value { font-size: 21px; font-weight: 700; margin-top: 6px; min-height: 27px; font-variant-numeric: tabular-nums; }
+    .kpi-sub { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; color: var(--text-3); font-size: 11.5px; }
+    .delta { font-size: 11px; font-weight: 600; }
+    .delta.up { color: var(--ok); }
+    .delta.down { color: var(--bad); }
+    .delta.flat { color: var(--text-3); }
+    .kpi-spark { margin-top: 8px; opacity: 0.95; }
+
+    /* KPI heading colors — a distinct professional hue per card */
+    .kpi.accent-0 .kpi-label, .kpi.accent-0 .kpi-icon { color: var(--rev-0); }
+    .kpi.accent-1 .kpi-label, .kpi.accent-1 .kpi-icon { color: var(--rev-1); }
+    .kpi.accent-2 .kpi-label, .kpi.accent-2 .kpi-icon { color: var(--rev-2); }
+    .kpi.accent-3 .kpi-label, .kpi.accent-3 .kpi-icon { color: var(--rev-3); }
+    .kpi.accent-4 .kpi-label, .kpi.accent-4 .kpi-icon { color: var(--rev-4); }
+    .kpi.accent-5 .kpi-label, .kpi.accent-5 .kpi-icon { color: var(--rev-5); }
+    .kpi.accent-6 .kpi-label, .kpi.accent-6 .kpi-icon { color: var(--rev-6); }
+    .kpi.accent-7 .kpi-label, .kpi.accent-7 .kpi-icon { color: var(--rev-7); }
+    .kpi.accent-0 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-0); }
+    .kpi.accent-1 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-1); }
+    .kpi.accent-2 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-2); }
+    .kpi.accent-3 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-3); }
+    .kpi.accent-4 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-4); }
+    .kpi.accent-5 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-5); }
+    .kpi.accent-6 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-6); }
+    .kpi.accent-7 { box-shadow: var(--shadow), inset 0 3px 0 var(--rev-7); }
+
+    .skeleton {
+      position: relative; overflow: hidden;
+      background: var(--skeleton); border-radius: 6px;
+    }
+    .skeleton::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, var(--skeleton-hi), transparent);
+      transform: translateX(-100%);
+      animation: shimmer 1.2s infinite linear;
+    }
+    @keyframes shimmer { to { transform: translateX(100%); } }
+    .k-line { height: 12px; }
+    .k-pill { height: 14px; width: 90px; border-radius: 999px; }
+
+    /* ---------- Tooltip ---------- */
+    .chart-tooltip {
+      position: fixed; z-index: 90; pointer-events: none;
+      background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: var(--shadow);
+      padding: 9px 11px; font-size: 12px; color: var(--text-1);
+      min-width: 150px; max-width: 280px;
+      opacity: 0; transition: opacity 80ms ease;
+    }
+    .tt-row { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; }
+    .tt-row span { color: var(--text-3); }
+    .tt-row b { font-variant-numeric: tabular-nums; }
+
+    /* ---------- Misc ---------- */
+    body.drawer-open { overflow: hidden; }
+    .empty { color: var(--text-3); padding: 18px; text-align: center; }
+    .muted { color: var(--text-3); }
+    .good { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+
+    /* ---------- Responsive core ---------- */
+    @media (max-width: 880px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar {
+        position: fixed; inset-block: 0; inset-inline-start: 0;
+        width: min(300px, 84vw);
+        transform: translateX(-105%);
+        transition: transform 0.24s ease;
+        box-shadow: var(--shadow);
+      }
+      [dir="rtl"] .sidebar { transform: translateX(105%); }
+      :root[data-sidebar="mobile-open"] .sidebar { transform: translateX(0); }
+      :root[data-sidebar="mobile-open"] .sidebar-overlay { opacity: 1; pointer-events: auto; }
+      :root[data-sidebar="mobile-open"] .nav-label,
+      :root[data-sidebar="mobile-open"] .brand-text,
+      :root[data-sidebar="mobile-open"] .nav-section-title { display: block; }
+      .title-block h1 { font-size: 14.5px; }
+      .content { padding: 12px; gap: 12px; }
+    }
+
+    /* ---------- Reduced motion ---------- */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001s !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001s !important;
+      }
+      .skeleton::after { animation: none; }
+    }
+  </style>
+
+  <!-- Non-critical CSS: deferred, below-the-fold components -->
+  <link rel="preload" as="style" href="styles.css?v=5" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="styles.css?v=5" /></noscript>
 </head>
 <body>
-  <div class="app" id="app" data-sidebar="expanded">
-    <!-- Sidebar overlay (mobile) -->
+  <div class="app" id="app">
     <div class="sidebar-overlay" tabindex="-1" aria-hidden="true"></div>
 
     <!-- Sidebar -->
@@ -38,54 +474,50 @@
 
       <nav class="nav" id="sideNav" aria-label="Sections">
         <div class="nav-section-title" data-i18n="nav_overview">Overview</div>
-        <button class="nav-item active" data-nav="overview" aria-label="Overview">
-          <span class="nav-icon" data-icon="chart"></span>
+        <button class="nav-item active" data-nav="overview" type="button">
+          <span class="nav-icon" data-icon="chart" aria-hidden="true"></span>
           <span class="nav-label" data-i18n="nav_overview">Overview</span>
         </button>
 
         <div class="nav-section-title" data-i18n="nav_performance">Performance</div>
-        <button class="nav-item" data-nav="performance" aria-label="Performance">
-          <span class="nav-icon" data-icon="chartBar"></span>
+        <button class="nav-item" data-nav="performance" type="button">
+          <span class="nav-icon" data-icon="chartBar" aria-hidden="true"></span>
           <span class="nav-label" data-i18n="nav_performance">Performance</span>
         </button>
 
-        <div class="nav-section-title" data-i18n="nav_branches">Branches</div>
-        <button class="nav-item" data-nav="ranking" aria-label="Branch Ranking">
-          <span class="nav-icon" data-icon="fire"></span>
+        <div class="nav-section-title" data-i18n="nav_ranking">Branch Ranking</div>
+        <button class="nav-item" data-nav="ranking" type="button">
+          <span class="nav-icon" data-icon="fire" aria-hidden="true"></span>
           <span class="nav-label" data-i18n="nav_ranking">Branch Ranking</span>
         </button>
 
-        <div class="nav-section-title" data-i18n="nav_sources">Revenue</div>
-        <button class="nav-item" data-nav="sources" aria-label="Revenue Sources">
-          <span class="nav-icon" data-icon="chartPie"></span>
+        <div class="nav-section-title" data-i18n="nav_sources">Revenue Sources</div>
+        <button class="nav-item" data-nav="sources" type="button">
+          <span class="nav-icon" data-icon="chartPie" aria-hidden="true"></span>
           <span class="nav-label" data-i18n="nav_sources">Revenue Sources</span>
         </button>
 
-        <div class="nav-section-title" data-i18n="nav_annual">Reports</div>
-        <button class="nav-item" data-nav="annual" aria-label="2026 Annual Report">
-          <span class="nav-icon" data-icon="target"></span>
+        <div class="nav-section-title" data-i18n="nav_annual">2026 Annual Report</div>
+        <button class="nav-item" data-nav="annual" type="button">
+          <span class="nav-icon" data-icon="target" aria-hidden="true"></span>
           <span class="nav-label" data-i18n="nav_annual">2026 Annual Report</span>
         </button>
       </nav>
 
       <div class="sidebar-foot">
-        <div class="foot-text">
-          <b>v2.0</b> · Force Holding Co
-        </div>
+        <div>v3.0 · Force Holding Co</div>
       </div>
     </aside>
 
     <!-- Main column -->
     <div class="main">
       <header class="header">
-        <button class="icon-btn" data-action="toggle-sidebar" aria-label="Toggle sidebar" title="Toggle sidebar">
+        <button class="icon-btn" data-action="toggle-sidebar" aria-label="Toggle sidebar" type="button">
           <span data-icon="menu" aria-hidden="true"></span>
         </button>
 
         <div class="title-block">
-          <h1>
-            <span data-i18n="app_title">ICH — All Branches Sales Dashboard</span>
-          </h1>
+          <h1><span data-i18n="app_title">ICH — All Branches Sales Dashboard</span></h1>
           <div class="subtitle">
             <span data-i18n="app_subtitle">Force Holding Co</span>
             · <span id="periodLabel">—</span>
@@ -93,25 +525,26 @@
         </div>
 
         <div class="header-actions">
-          <span class="gym-badge" id="gymBadge" aria-live="polite">
-            <img alt="Active gym logo" data-logo-stem="all-branches" />
-            <span class="badge-text">
-              <b id="gymBadgeName">All Branches</b>
-              <small id="gymBadgeSub">Force Holding Co</small>
-            </span>
+          <span class="status-pill demo" id="demoPill" hidden>
+            <span class="dot" aria-hidden="true"></span>
+            <span data-i18n="status_demo">Demo data</span>
           </span>
 
-          <span class="status-pill" id="statusPill">
+          <span class="status-pill" id="statusPill" aria-live="polite">
             <span class="dot" aria-hidden="true"></span>
             <span id="statusPillText">Online</span>
           </span>
 
-          <button class="lang-toggle" id="langToggle" aria-label="Switch language">
+          <button id="theme-toggle" type="button" aria-label="Toggle theme" title="Theme (T)">
+            <span data-icon="sun" aria-hidden="true"></span>
+          </button>
+
+          <button class="lang-toggle" id="langToggle" aria-label="Switch language" type="button" title="Language (L)">
             <span data-icon="globe" aria-hidden="true"></span>
             <span id="langToggleText">العربية</span>
           </button>
 
-          <button class="refresh-btn" id="refreshBtn" aria-label="Refresh">
+          <button class="refresh-btn" id="refreshBtn" aria-label="Refresh" type="button" title="Refresh (R)">
             <span data-icon="refresh" aria-hidden="true"></span>
             <span data-i18n="action_refresh">Refresh</span>
           </button>
@@ -122,80 +555,98 @@
         <!-- Filters -->
         <section class="filters" aria-label="Dashboard filters">
           <div class="filter">
-            <label data-i18n="filter_branch">Branch</label>
-            <select id="branchSelect" aria-label="Branch"></select>
-          </div>
-
-          <div class="filter">
-            <label data-i18n="filter_period">Period</label>
-            <div class="filter-presets" id="periodPresets" role="group" aria-label="Period presets">
-              <button class="chip" data-preset="today" data-i18n="filter_preset_today">Today</button>
-              <button class="chip" data-preset="15" data-i18n="filter_preset_15">Last 15 Days</button>
-              <button class="chip" data-preset="30" data-i18n="filter_preset_30">Last 1 Month</button>
-              <button class="chip active" data-preset="month" data-i18n="filter_preset_30">Month</button>
-              <button class="chip" data-preset="custom" data-i18n="filter_preset_custom">Custom</button>
-            </div>
-          </div>
-
-          <div class="filter" id="customRange" style="display:none">
-            <label data-i18n="filter_from">From</label>
-            <input type="date" id="dateFrom" />
-          </div>
-          <div class="filter" id="customRangeTo" style="display:none">
-            <label data-i18n="filter_to">To</label>
-            <input type="date" id="dateTo" />
-          </div>
-
-          <div class="filter">
-            <label>Year</label>
-            <select id="yearSelect" aria-label="Year"></select>
-          </div>
-
-          <div class="filter">
-            <label>Month</label>
-            <select id="monthSelect" aria-label="Month"></select>
+            <label id="branchFilterLabel" data-i18n="filter_branch">Branch</label>
+            <button class="listbox-btn" id="branchListbox" type="button" aria-labelledby="branchFilterLabel"><span class="lb-label"><span class="lb-text">All Branches</span></span><span class="lb-chev" aria-hidden="true">▾</span></button>
           </div>
         </section>
 
-        <!-- Error slot -->
         <div id="errorSlot"></div>
 
-        <!-- KPI grid -->
-        <section class="kpi-grid" id="kpiGrid" aria-label="Key metrics"></section>
+        <!-- Overview: KPIs -->
+        <section id="sec-overview" aria-label="Key metrics">
+          <div class="kpi-grid" id="kpiGrid">
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:90px"></div></div><div class="skeleton k-line" style="width:62%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:80px"></div></div><div class="skeleton k-line" style="width:58%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:96px"></div></div><div class="skeleton k-line" style="width:64%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:86px"></div></div><div class="skeleton k-line" style="width:56%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:92px"></div></div><div class="skeleton k-line" style="width:60%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:88px"></div></div><div class="skeleton k-line" style="width:54%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:98px"></div></div><div class="skeleton k-line" style="width:66%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:84px"></div></div><div class="skeleton k-line" style="width:52%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+          </div>
+        </section>
 
-        <!-- Main revenue trend (above the fold) -->
-        <section class="section fade-in" id="trendSection" aria-label="Revenue trend">
+        <!-- Performance: trend + monthly -->
+        <section class="section fade-in" id="sec-performance" aria-label="Performance charts">
           <div class="section-head">
             <div class="section-title">
               <span class="icon-wrap" data-icon="chart"></span>
               <span data-i18n="sec_daily_trend">Revenue Trend</span>
             </div>
-            <span class="section-note" id="trendNote">—</span>
+            <div class="section-head-right">
+              <div class="seg" id="rangeFilter" role="group" aria-label="Period">
+                <button class="seg-btn active" data-mode="daily" type="button" data-i18n="trend_mode_daily">Daily</button>
+                <button class="seg-btn" data-mode="last" type="button" data-i18n="trend_mode_last">Last Month</button>
+                <button class="seg-btn" data-mode="custom" type="button" data-i18n="trend_mode_custom">Custom</button>
+              </div>
+              <span class="section-note" id="trendNote">—</span>
+            </div>
           </div>
           <div class="section-body">
-            <div class="chart-wrap">
+            <div class="chart-wrap" dir="ltr" style="height:280px">
               <canvas id="dailyChart"></canvas>
             </div>
             <div class="legend" id="dailyLegend"></div>
           </div>
+
+          <div class="range-pop" id="rangePop" hidden>
+            <label>
+              <span data-i18n="filter_from">From</span>
+              <input type="date" id="rangeFrom" />
+            </label>
+            <label>
+              <span data-i18n="filter_to">To</span>
+              <input type="date" id="rangeTo" />
+            </label>
+            <button class="chip apply" id="rangeApply" type="button" data-i18n="action_apply">Apply</button>
+          </div>
+
+          <div class="section-head" style="padding-top:6px">
+            <div class="section-title">
+              <span class="icon-wrap" data-icon="chartBar"></span>
+              <span data-i18n="sec_monthly_compare">Monthly Sales vs Target</span>
+            </div>
+            <span class="section-note" id="monthlyNote">—</span>
+          </div>
+          <div class="section-body">
+            <div class="chart-wrap" dir="ltr" style="height:280px">
+              <canvas id="monthlyChart"></canvas>
+            </div>
+            <div class="legend" id="monthlyLegend"></div>
+          </div>
         </section>
 
-        <!-- Two-col: branch performance + revenue sources -->
+        <!-- Ranking + Revenue sources -->
         <div class="two-col">
-          <section class="section fade-in" aria-label="Branch performance and ranking">
+          <section class="section fade-in" id="sec-ranking" aria-label="Branch performance and ranking">
             <div class="section-head">
               <div class="section-title">
                 <span class="icon-wrap" data-icon="fire"></span>
-                <span data-i18n="sec_ranking">Branch Performance &amp; Ranking</span>
+                <span data-i18n="sec_ranking">Branch Performance & Ranking</span>
               </div>
-              <span class="section-note" data-i18n="t_rank_label">Ranked by revenue</span>
+              <span class="section-note" id="rankingNote">—</span>
             </div>
             <div class="section-body">
-              <div class="ranking" id="rankingList"></div>
+              <div class="ranking" id="rankingList">
+                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:62%"></div><div class="skeleton k-line" style="width:42%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
+                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:55%"></div><div class="skeleton k-line" style="width:38%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
+                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:58%"></div><div class="skeleton k-line" style="width:44%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
+                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:50%"></div><div class="skeleton k-line" style="width:36%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
+              </div>
             </div>
           </section>
 
-          <section class="section fade-in" aria-label="Revenue source breakdown">
+          <section class="section fade-in" id="sec-sources" aria-label="Revenue source breakdown">
             <div class="section-head">
               <div class="section-title">
                 <span class="icon-wrap" data-icon="chartPie"></span>
@@ -204,32 +655,28 @@
               <span class="section-note" id="revenueNote">—</span>
             </div>
             <div class="section-body">
-              <div class="rev-grid" id="revenueGrid"></div>
-              <div id="revenuePartial"></div>
-              <div class="chart-wrap" style="margin-top:14px;height:240px">
-                <canvas id="revenueChart"></canvas>
+              <div class="rev-flex">
+                <div class="donut-mount" id="donutMount" dir="ltr"></div>
+                <div class="rev-list-wrap">
+                  <div id="revList">
+                    <ul class="rev-rows">
+                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:40%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
+                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:34%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
+                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:44%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
+                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:30%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
+                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:36%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
+                      <li class="rev-row total"><span class="skeleton k-line" style="width:22%"></span><span class="skeleton k-pill"></span></li>
+                    </ul>
+                  </div>
+                  <div class="empty" id="revenueEmpty" hidden></div>
+                </div>
               </div>
+              <div class="partial" id="revenuePartial" hidden></div>
             </div>
           </section>
         </div>
 
-        <!-- Monthly bars -->
-        <section class="section fade-in" aria-label="Monthly sales vs target">
-          <div class="section-head">
-            <div class="section-title">
-              <span class="icon-wrap" data-icon="chartBar"></span>
-              <span data-i18n="sec_monthly_compare">Monthly Sales vs Target</span>
-            </div>
-            <span class="section-note" id="monthlyNote">—</span>
-          </div>
-          <div class="section-body">
-            <div class="chart-wrap" style="height:280px">
-              <canvas id="monthlyChart"></canvas>
-            </div>
-          </div>
-        </section>
-
-        <!-- Units (per-gym cards) -->
+        <!-- Units -->
         <section class="section fade-in" aria-label="Sales unit performance">
           <div class="section-head">
             <div class="section-title">
@@ -239,16 +686,24 @@
             <span class="section-note" id="unitNote">—</span>
           </div>
           <div class="section-body">
-            <div class="units-grid" id="unitsGrid"></div>
-          </div>
-        </section>
+            <div class="units-grid" id="unitsGrid">
+                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:52%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:44%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
+                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:56%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:40%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
+                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:50%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:48%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
+                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:54%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:42%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
+                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:46%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:38%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
+                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:48%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:36%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
+              </div>
+              <div class="pending-note" id="pendingNote"></div>
+            </div>
+          </section>
 
         <!-- Annual report -->
-        <section class="section fade-in" aria-label="2026 annual report">
+        <section class="section fade-in" id="sec-annual" aria-label="Annual performance report">
           <div class="section-head">
             <div class="section-title">
               <span class="icon-wrap" data-icon="target"></span>
-              <span data-i18n="sec_annual">2026 Annual Performance Report</span>
+              <span id="annualTitle" data-i18n="sec_annual">2026 Annual Performance Report</span>
             </div>
             <span class="section-note" id="annualNote">—</span>
           </div>
@@ -257,33 +712,62 @@
               <table id="annualTable">
                 <thead>
                   <tr>
-                    <th>Month</th>
+                    <th data-i18n="t_ann_month">Month</th>
                     <th class="right" data-i18n="t_ann_actual">Actual</th>
-                    <th class="right" data-i18n="t_ann_target_total">Target</th>
+                    <th class="right" data-i18n="t_ann_target">Target</th>
                     <th class="right" data-i18n="t_ann_achievement">Achievement</th>
                     <th class="right" data-i18n="t_ann_remaining">Remaining</th>
                   </tr>
                 </thead>
-                <tbody id="annualTbody"></tbody>
+                <tbody id="annualTbody">
+                  <tr><td><div class="skeleton k-line" style="width:58%"></div></td><td><div class="skeleton k-line" style="width:78%"></div></td><td><div class="skeleton k-line" style="width:70%"></div></td><td><div class="skeleton k-line" style="width:52%"></div></td><td><div class="skeleton k-line" style="width:82%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:64%"></div></td><td><div class="skeleton k-line" style="width:72%"></div></td><td><div class="skeleton k-line" style="width:66%"></div></td><td><div class="skeleton k-line" style="width:56%"></div></td><td><div class="skeleton k-line" style="width:76%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:60%"></div></td><td><div class="skeleton k-line" style="width:80%"></div></td><td><div class="skeleton k-line" style="width:62%"></div></td><td><div class="skeleton k-line" style="width:58%"></div></td><td><div class="skeleton k-line" style="width:70%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:66%"></div></td><td><div class="skeleton k-line" style="width:74%"></div></td><td><div class="skeleton k-line" style="width:68%"></div></td><td><div class="skeleton k-line" style="width:50%"></div></td><td><div class="skeleton k-line" style="width:78%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:56%"></div></td><td><div class="skeleton k-line" style="width:76%"></div></td><td><div class="skeleton k-line" style="width:64%"></div></td><td><div class="skeleton k-line" style="width:54%"></div></td><td><div class="skeleton k-line" style="width:72%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:62%"></div></td><td><div class="skeleton k-line" style="width:70%"></div></td><td><div class="skeleton k-line" style="width:60%"></div></td><td><div class="skeleton k-line" style="width:60%"></div></td><td><div class="skeleton k-line" style="width:74%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:58%"></div></td><td><div class="skeleton k-line" style="width:82%"></div></td><td><div class="skeleton k-line" style="width:66%"></div></td><td><div class="skeleton k-line" style="width:48%"></div></td><td><div class="skeleton k-line" style="width:68%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:64%"></div></td><td><div class="skeleton k-line" style="width:78%"></div></td><td><div class="skeleton k-line" style="width:70%"></div></td><td><div class="skeleton k-line" style="width:52%"></div></td><td><div class="skeleton k-line" style="width:80%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:60%"></div></td><td><div class="skeleton k-line" style="width:72%"></div></td><td><div class="skeleton k-line" style="width:58%"></div></td><td><div class="skeleton k-line" style="width:56%"></div></td><td><div class="skeleton k-line" style="width:76%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:66%"></div></td><td><div class="skeleton k-line" style="width:74%"></div></td><td><div class="skeleton k-line" style="width:72%"></div></td><td><div class="skeleton k-line" style="width:50%"></div></td><td><div class="skeleton k-line" style="width:78%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:54%"></div></td><td><div class="skeleton k-line" style="width:76%"></div></td><td><div class="skeleton k-line" style="width:62%"></div></td><td><div class="skeleton k-line" style="width:62%"></div></td><td><div class="skeleton k-line" style="width:70%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:68%"></div></td><td><div class="skeleton k-line" style="width:80%"></div></td><td><div class="skeleton k-line" style="width:64%"></div></td><td><div class="skeleton k-line" style="width:46%"></div></td><td><div class="skeleton k-line" style="width:82%"></div></td></tr>
+                  <tr><td><div class="skeleton k-line" style="width:52%"></div></td><td><div class="skeleton k-line" style="width:68%"></div></td><td><div class="skeleton k-line" style="width:60%"></div></td><td><div class="skeleton k-line" style="width:58%"></div></td><td><div class="skeleton k-line" style="width:66%"></div></td></tr>
+                </tbody>
               </table>
             </div>
           </div>
         </section>
 
-        <footer style="text-align:center;color:var(--text-3);font-size:11.5px;padding:20px 0 6px">
-          ICH Sales Dashboard · Force Holding Co
+        <footer class="foot">
+          ICH Sales Dashboard · Force Holding Co · v3.0
         </footer>
       </main>
     </div>
   </div>
 
-  <!-- Scripts (order matters: themes/icons/i18n first, then charts/sidebar, then app) -->
-  <script src="themes.js"></script>
-  <script src="icons.js"></script>
-  <script src="i18n.js"></script>
-  <script src="data.js"></script>
-  <script src="sidebar.js"></script>
-  <script src="charts.js"></script>
-  <script src="app.js"></script>
+  <!-- ============================================================
+       Bundle: app.bundle.js — built with esbuild from:
+         themes.js, i18n.js, icons.js, demo.js, data.js,
+         charts.js, confetti.js, sidebar.js, app.js,
+         components/listbox.js, components/ticker.js
+       (components/rangeFilter.js ships as an available component
+        and is intentionally not bundled after the v3.1 UI rework.)
+       ============================================================ -->
+  <script src="app.bundle.js?v=5" defer></script>
+
+  <!-- Service worker (HTTPS or localhost only) -->
+  <script>
+    (function () {
+      if ("serviceWorker" in navigator) {
+        var host = location.hostname;
+        if (location.protocol === "https:" || host === "localhost" || host === "127.0.0.1") {
+          window.addEventListener("load", function () {
+            navigator.serviceWorker.register("service-worker.js?v=5").catch(function () { /* offline mode unavailable */ });
+          });
+        }
+      }
+    })();
+  </script>
 </body>
 </html>
