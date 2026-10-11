@@ -11,54 +11,55 @@
 
 // ----------------------------------------------------------
 // Branch registry — the single source of truth for gyms.
-// Exactly 6. Do not add or remove.
+// Exactly 6: 4 active (from backend) + 2 advance/pending.
+// Do not add or remove.
 // ----------------------------------------------------------
 export const BRANCHES = [
   {
-    code: "ihc_hawalli",
-    name_en: "ICH Hawalli",
-    name_ar: "آي إتش سي حولي",
-    short: "Hawalli",
+    code: "stretch_men",
+    name_en: "Stretch Fitness Center - Men",
+    name_ar: "ستريتش فيتنس سنتر - رجال",
+    short: "Stretch Men",
     pending: false,
     accent: { dark: "#5B8DEF", light: "#2F54EB" },
   },
   {
-    code: "ihc_farwaniya",
-    name_en: "ICH Farwaniya",
-    name_ar: "آي إتش سي الفروانية",
-    short: "Farwaniya",
+    code: "stretch_ladies",
+    name_en: "Stretch Fitness Center - Ladies",
+    name_ar: "ستريتش فيتنس سنتر - سيدات",
+    short: "Stretch Ladies",
     pending: false,
     accent: { dark: "#A78BFA", light: "#7048E8" },
   },
   {
-    code: "ihc_fahaheel",
-    name_en: "ICH Fahaheel",
-    name_ar: "آي إتش سي الفحيحيل",
-    short: "Fahaheel",
+    code: "the_gym_mishref",
+    name_en: "The Gym Mishref",
+    name_ar: "ذا جيم مشرف",
+    short: "The Gym Mishref",
     pending: false,
     accent: { dark: "#45C4B0", light: "#0E8A80" },
   },
   {
-    code: "ihc_mangaf",
-    name_en: "ICH Mangaf",
-    name_ar: "آي إتش سي المنقف",
-    short: "Mangaf",
+    code: "ihc_express",
+    name_en: "IHC-Express",
+    name_ar: "آي إتش سي إكسبريس",
+    short: "IHC-Express",
     pending: false,
     accent: { dark: "#E8B15C", light: "#9A6A1A" },
   },
   {
     code: "ihc_jahra",
-    name_en: "ICH Jahra",
+    name_en: "IHC Jahra",
     name_ar: "آي إتش سي الجهراء",
     short: "Jahra",
     pending: true,
     accent: { dark: "#5BC8E8", light: "#0B7FA8" },
   },
   {
-    code: "ihc_salmiya",
-    name_en: "ICH Salmiya",
-    name_ar: "آي إتش سي السالمية",
-    short: "Salmiya",
+    code: "the_gym_fahaheel",
+    name_en: "The Gym Fahaheel",
+    name_ar: "ذا جيم الفحيحيل",
+    short: "The Gym Fahaheel",
     pending: true,
     accent: { dark: "#E07A9A", light: "#B3377E" },
   },

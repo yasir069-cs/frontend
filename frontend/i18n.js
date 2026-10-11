@@ -11,7 +11,7 @@
 
 const STRINGS = {
   en: {
-    app_title: "ICH — All Branches Sales Dashboard",
+    app_title: "Central Sales Dashboard",
     app_subtitle: "Force Holding Co",
     brand_name: "Force Holding Co",
     nav_overview: "Overview",
@@ -32,6 +32,7 @@ const STRINGS = {
     action_refresh: "Refresh",
     action_retry: "Retry",
     action_close: "Close",
+    action_apply: "Apply",
     lang_switch_label: "العربية",
     theme_toggle_label: "Toggle theme",
     month_prev_label: "Previous month",
@@ -65,7 +66,6 @@ const STRINGS = {
     trend_mode_daily: "Daily",
     trend_mode_last: "Last Month",
     trend_mode_custom: "Custom",
-    action_apply: "Apply",
     all_branches: "All Branches",
     pending_badge: "(pending)",
     pending_note: "Pending branches are shown for visibility but are not included in totals, rankings, targets, or the annual report.",
@@ -106,7 +106,7 @@ const STRINGS = {
   },
 
   ar: {
-    app_title: "آي إتش سي — لوحة مبيعات جميع الفروع",
+    app_title: "لوحة مبيعات المبيعات المركزية",
     app_subtitle: "فورس القابضة",
     brand_name: "فورس القابضة",
     nav_overview: "نظرة عامة",
@@ -127,6 +127,7 @@ const STRINGS = {
     action_refresh: "تحديث",
     action_retry: "إعادة المحاولة",
     action_close: "إغلاق",
+    action_apply: "تطبيق",
     lang_switch_label: "English",
     theme_toggle_label: "تبديل المظهر",
     month_prev_label: "الشهر السابق",
@@ -160,7 +161,6 @@ const STRINGS = {
     trend_mode_daily: "اليومي",
     trend_mode_last: "الشهر الماضي",
     trend_mode_custom: "مخصص",
-    action_apply: "تطبيق",
     all_branches: "جميع الفروع",
     pending_badge: "(قيد الانتظار)",
     pending_note: "تُعرض الفروع قيد الانتظار للاطلاع فقط، ولا تُحتسب في المجاميع ولا في الترتيب ولا في الأهداف ولا في التقرير السنوي.",

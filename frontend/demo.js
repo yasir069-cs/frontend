@@ -9,7 +9,7 @@
      { success: true, data: { kpis, sales_units, daily,
        monthly, revenue, today } }
 
-   Pending gyms (Jahra, Salmiya) are NOT included here —
+   Pending gyms (Jahra, The Gym Fahaheel) are NOT included here —
    data.js owns their isolation.
 
    Anchor values for 2026-10 (must not drift):
@@ -20,28 +20,28 @@
 "use strict";
 
 const GYMS = [
-  { code: "ihc_hawalli", name_en: "ICH Hawalli", name_ar: "آي إتش سي حولي", txRatio: 13.2 },
-  { code: "ihc_farwaniya", name_en: "ICH Farwaniya", name_ar: "آي إتش سي الفروانية", txRatio: 12.8 },
-  { code: "ihc_fahaheel", name_en: "ICH Fahaheel", name_ar: "آي إتش سي الفحيحيل", txRatio: 11.9 },
-  { code: "ihc_mangaf", name_en: "ICH Mangaf", name_ar: "آي إتش سي المنقف", txRatio: 10.7 },
+  { code: "stretch_men", name_en: "Stretch Fitness Center - Men", name_ar: "ستريتش فيتنس سنتر - رجال", txRatio: 13.2 },
+  { code: "stretch_ladies", name_en: "Stretch Fitness Center - Ladies", name_ar: "ستريتش فيتنس سنتر - سيدات", txRatio: 12.8 },
+  { code: "the_gym_mishref", name_en: "The Gym Mishref", name_ar: "ذا جيم مشرف", txRatio: 11.9 },
+  { code: "ihc_express", name_en: "IHC-Express", name_ar: "آي إتش سي إكسبريس", txRatio: 10.7 },
 ];
 
 // Monthly sales baselines (KD), index 0 = Jan. October (idx 9)
 // values are the locked anchors.
 const SALES = {
-  ihc_hawalli:   [51240.0, 48980.5, 57610.2, 56105.8, 59870.4, 62320.9, 65110.7, 67050.3, 70125.6, 68432.5, 66210.8, 72405.1],
-  ihc_farwaniya: [42310.4, 40875.2, 47520.6, 46108.9, 49055.1, 51230.8, 53440.2, 54980.7, 57610.0, 55318.7, 53705.9, 58420.3],
-  ihc_fahaheel:  [36870.9, 35540.6, 41230.8, 40105.3, 42680.5, 44560.1, 46480.6, 47820.4, 50110.2, 48273.1, 46905.7, 51030.9],
-  ihc_mangaf:    [28950.3, 27905.8, 32340.1, 31460.7, 33475.9, 34950.4, 36455.2, 37510.6, 39305.8, 39190.0, 38120.5, 41540.8],
+  stretch_men:     [51240.0, 48980.5, 57610.2, 56105.8, 59870.4, 62320.9, 65110.7, 67050.3, 70125.6, 68432.5, 66210.8, 72405.1],
+  stretch_ladies:  [42310.4, 40875.2, 47520.6, 46108.9, 49055.1, 51230.8, 53440.2, 54980.7, 57610.0, 55318.7, 53705.9, 58420.3],
+  the_gym_mishref: [36870.9, 35540.6, 41230.8, 40105.3, 42680.5, 44560.1, 46480.6, 47820.4, 50110.2, 48273.1, 46905.7, 51030.9],
+  ihc_express:     [28950.3, 27905.8, 32340.1, 31460.7, 33475.9, 34950.4, 36455.2, 37510.6, 39305.8, 39190.0, 38120.5, 41540.8],
 };
 
-// Monthly targets (KD). October targets: only Farwaniya exceeds
+// Monthly targets (KD). October targets: only stretch_ladies exceeds
 // its target, so the confetti micro-celebration demos once.
 const TARGETS = {
-  ihc_hawalli:   [66000, 64000, 66000, 65000, 67000, 68000, 70000, 70500, 71500, 71500, 69500, 72000],
-  ihc_farwaniya: [49500, 48000, 50000, 49000, 50500, 51500, 53000, 53500, 54500, 54000, 52500, 55000],
-  ihc_fahaheel:  [45500, 44000, 46000, 45000, 46500, 47500, 49000, 49000, 50000, 49500, 48000, 50500],
-  ihc_mangaf:    [39000, 38000, 39500, 38500, 40000, 40500, 41500, 42000, 42500, 42000, 41000, 43000],
+  stretch_men:     [66000, 64000, 66000, 65000, 67000, 68000, 70000, 70500, 71500, 71500, 69500, 72000],
+  stretch_ladies:  [49500, 48000, 50000, 49000, 50500, 51500, 53000, 53500, 54500, 54000, 52500, 55000],
+  the_gym_mishref: [45500, 44000, 46000, 45000, 46500, 47500, 49000, 49000, 50000, 49500, 48000, 50500],
+  ihc_express:     [39000, 38000, 39500, 38500, 40000, 40500, 41500, 42000, 42500, 42000, 41000, 43000],
 };
 
 // Locked October 2026 revenue split (sums to 211214.3 exactly).
@@ -171,10 +171,10 @@ export function getDemoDashboard(year, month) {
       code: g.code,
       name_en: g.name_en,
       name_ar: g.name_ar,
-      sales: sales,
+      sales,
       transactions: gymTx[g.code],
       customers: gymCustomers[g.code],
-      target: target,
+      target,
       achievement_pct: achievement,
       status: "online",
       is_pending: false,

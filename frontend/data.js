@@ -462,11 +462,11 @@ export function normalizeDashboard(raw, year, month) {
 //   unless the backend later provides u.revenue.sources.
 // ----------------------------------------------------------
 const MIX_BIAS = {
-  ihc_hawalli: [0.52, 0.18, 0.12, 0.12, 0.06],
-  ihc_farwaniya: [0.47, 0.20, 0.14, 0.13, 0.06],
-  ihc_fahaheel: [0.38, 0.27, 0.13, 0.15, 0.07],
-  ihc_mangaf: [0.44, 0.22, 0.15, 0.12, 0.07],
-  default: [0.45, 0.20, 0.15, 0.13, 0.07],
+  stretch_men:     [0.52, 0.18, 0.12, 0.12, 0.06],
+  stretch_ladies:  [0.47, 0.20, 0.14, 0.13, 0.06],
+  the_gym_mishref: [0.38, 0.27, 0.13, 0.15, 0.07],
+  ihc_express:     [0.44, 0.22, 0.15, 0.12, 0.07],
+  default:         [0.45, 0.20, 0.15, 0.13, 0.07],
 };
 
 function mulberry32(seed) {
