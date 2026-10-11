@@ -452,8 +452,8 @@
   </style>
 
   <!-- Non-critical CSS: deferred, below-the-fold components -->
-  <link rel="preload" as="style" href="styles.css?v=5" onload="this.onload=null;this.rel='stylesheet'" />
-  <noscript><link rel="stylesheet" href="styles.css?v=5" /></noscript>
+  <link rel="preload" as="style" href="styles.css?v=6" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="styles.css?v=6" /></noscript>
 </head>
 <body>
   <div class="app" id="app">
@@ -754,7 +754,7 @@
        (components/rangeFilter.js ships as an available component
         and is intentionally not bundled after the v3.1 UI rework.)
        ============================================================ -->
-  <script src="app.bundle.js?v=5" defer></script>
+  <script src="app.bundle.js?v=6" defer></script>
 
   <!-- Service worker (HTTPS or localhost only) -->
   <script>
@@ -763,7 +763,7 @@
         var host = location.hostname;
         if (location.protocol === "https:" || host === "localhost" || host === "127.0.0.1") {
           window.addEventListener("load", function () {
-            navigator.serviceWorker.register("service-worker.js?v=5").catch(function () { /* offline mode unavailable */ });
+            navigator.serviceWorker.register("service-worker.js?v=6").catch(function () { /* offline mode unavailable */ });
           });
         }
       }

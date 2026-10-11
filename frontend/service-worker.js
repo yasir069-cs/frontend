@@ -7,15 +7,15 @@
 
 "use strict";
 
-const VERSION = "ich-v3.0.1";
+const VERSION = "ich-v3.1.1";
 const STATIC_CACHE = "ich-static-" + VERSION;
 const API_CACHE = "ich-api-" + VERSION;
 
 const PRECACHE = [
   "./",
   "./index.html",
-  "./styles.css?v=5",
-  "./app.bundle.js?v=5",
+  "./styles.css?v=6",
+  "./app.bundle.js?v=6",
 ];
 
 self.addEventListener("install", (event) => {
