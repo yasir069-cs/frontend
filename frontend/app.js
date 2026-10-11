@@ -35,8 +35,8 @@ const state = {
   lastData: null,
 };
 
-// Revenue Trend view modes: daily | last | custom
-const trendState = { mode: "daily", from: null, to: null, customRows: null, customKey: "" };
+// Revenue Trend period preset: month | today | 15 | 30 | custom
+const trendState = { preset: "month", from: null, to: null, customRows: null, customKey: "" };
 
 let branchLb = null;
 let bfcacheRestore = false;
@@ -253,20 +253,38 @@ function tickerFor(id, value, format) {
 }
 
 // ----------------------------------------------------------
-// Trend chart — Daily / Last Month / Custom modes
+// Trend chart — period presets from the filters row:
+//   Today / Last 15 Days / Last 1 Month / Month / Custom
 // ----------------------------------------------------------
+function mergedDaily(result) {
+  const cur = (result.data && result.data.daily) || [];
+  const prev = result.context && result.context.prev && Array.isArray(result.context.prev.daily)
+    ? result.context.prev.daily
+    : [];
+  return prev.concat(cur).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
 function trendRowsFor(result) {
   const d = result.data;
-  if (trendState.mode === "last") {
-    const prev = result.context && result.context.prev;
-    if (prev && Array.isArray(prev.daily) && prev.daily.length) {
-      const pm = state.month - 1 < 1 ? 12 : state.month - 1;
-      const py = state.month - 1 < 1 ? state.year - 1 : state.year;
-      return { rows: prev.daily, label: i18n.monthName(pm) + " " + py };
-    }
-    return { rows: [], label: t("t_no_daily") };
+  if (trendState.preset === "today") {
+    const today = iso(new Date());
+    const rows = mergedDaily(result).filter((r) => r.date === today);
+    if (rows.length) return { rows, label: today };
+    // Fallback: latest available day.
+    const all = mergedDaily(result);
+    const last = all.length ? all[all.length - 1].date : "—";
+    return { rows: all.filter((r) => r.date === last), label: last };
   }
-  if (trendState.mode === "custom") {
+  if (trendState.preset === "15" || trendState.preset === "30") {
+    const days = trendState.preset === "15" ? 15 : 30;
+    const to = iso(new Date());
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - (days - 1));
+    const from = iso(fromDate);
+    const rows = mergedDaily(result).filter((r) => r.date >= from && r.date <= to);
+    return { rows, label: from + " → " + to };
+  }
+  if (trendState.preset === "custom") {
     if (!trendState.from || !trendState.to) return { rows: [], label: "—" };
     const key = trendState.from + "→" + trendState.to;
     if (trendState.customKey === key && trendState.customRows) {
@@ -312,6 +330,7 @@ function renderTrend(result) {
 
 /** Fetch the custom range (parallel per-month merge) then redraw. */
 async function applyTrendCustom(from, to) {
+  trendState.preset = "custom";
   trendState.from = from;
   trendState.to = to;
   const key = from + "→" + to;
@@ -332,36 +351,46 @@ function iso(d) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
-function wireTrendModes() {
-  const seg = $("#rangeFilter");
-  if (!seg) return;
-  seg.querySelectorAll(".seg-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const mode = btn.dataset.mode;
-      trendState.mode = mode;
-      seg.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("active", b === btn));
-      const pop = $("#rangePop");
-      if (pop) pop.hidden = mode !== "custom";
-      if (mode === "custom" && !trendState.from) {
-        // Sensible default: trailing 30 days ending today.
+function syncChipActive(preset) {
+  $$("#rangeFilter [data-preset]").forEach((c) =>
+    c.classList.toggle("active", c.dataset.preset === preset)
+  );
+  const wrap = document.querySelector("#rangeFilter [data-custom-wrap]");
+  if (wrap) wrap.hidden = preset !== "custom";
+}
+
+function wirePeriodChips() {
+  const group = $("#rangeFilter");
+  if (!group) return;
+  group.querySelectorAll("[data-preset]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const preset = chip.dataset.preset;
+      syncChipActive(preset);
+      if (preset === "custom") {
+        const fromInput = group.querySelector('[data-range="from"]');
+        const toInput = group.querySelector('[data-range="to"]');
         const to = new Date();
         const from = new Date(to);
         from.setDate(to.getDate() - 29);
-        const fEl = $("#rangeFrom"), tEl = $("#rangeTo");
-        if (fEl) fEl.value = iso(from);
-        if (tEl) tEl.value = iso(to);
-        applyTrendCustom(iso(from), iso(to));
-      } else if (state.lastResult) {
-        renderTrend(state.lastResult);
+        if (fromInput && !fromInput.value) fromInput.value = iso(from);
+        if (toInput && !toInput.value) toInput.value = iso(to);
+        if (fromInput && toInput && fromInput.value <= toInput.value) {
+          applyTrendCustom(fromInput.value, toInput.value);
+        }
+      } else {
+        trendState.preset = preset;
+        if (state.lastResult) renderTrend(state.lastResult);
       }
     });
   });
-  const apply = $("#rangeApply");
-  if (apply) {
-    apply.addEventListener("click", () => {
-      const f = $("#rangeFrom") ? $("#rangeFrom").value : "";
-      const to2 = $("#rangeTo") ? $("#rangeTo").value : "";
-      if (f && to2 && f <= to2) applyTrendCustom(f, to2);
+  const applyBtn = group.querySelector('[data-apply]');
+  if (applyBtn) {
+    applyBtn.addEventListener("click", () => {
+      const f = group.querySelector('[data-range="from"]');
+      const to2 = group.querySelector('[data-range="to"]');
+      if (f && to2 && f.value && to2.value && f.value <= to2.value) {
+        applyTrendCustom(f.value, to2.value);
+      }
     });
   }
 }
@@ -879,13 +908,22 @@ function wireLanguageChange() {
   });
 }
 
+// ----------------------------------------------------------
+// Auto-refresh — deliberately slow: 5 minutes, and a
+// visibility return only revalidates when the data is
+// actually stale. No aggressive background syncing.
+// ----------------------------------------------------------
+const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
 function wireAutoRefresh() {
   setInterval(() => {
     if (document.hidden) return;
     load();
-  }, 60000);
+  }, SYNC_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) load();
+    if (document.hidden) return;
+    const age = state.lastResult ? Date.now() - state.lastResult.ts : Infinity;
+    if (age >= SYNC_INTERVAL_MS) load(); // only if stale
   }, { passive: true });
   // Back/forward cache restore: skip entry animations once.
   window.addEventListener("pageshow", (e) => {
@@ -920,7 +958,7 @@ function boot() {
 
   initSidebar({});
   buildBranchListbox();
-  wireTrendModes();
+  wirePeriodChips();
   wireHeader();
   syncThemeButton();
   wireLanguageChange();

@@ -558,6 +558,22 @@
             <label id="branchFilterLabel" data-i18n="filter_branch">Branch</label>
             <button class="listbox-btn" id="branchListbox" type="button" aria-labelledby="branchFilterLabel"><span class="lb-label"><span class="lb-text">All Branches</span></span><span class="lb-chev" aria-hidden="true">▾</span></button>
           </div>
+
+          <div class="filter">
+            <label data-i18n="filter_period">Period</label>
+            <div class="filter-presets" id="rangeFilter" role="group" aria-label="Period presets">
+              <button class="chip" data-preset="today" type="button" data-i18n="filter_preset_today">Today</button>
+              <button class="chip" data-preset="15" type="button" data-i18n="filter_preset_15">Last 15 Days</button>
+              <button class="chip" data-preset="30" type="button" data-i18n="filter_preset_30">Last 1 Month</button>
+              <button class="chip active" data-preset="month" type="button" data-i18n="filter_preset_month">Month</button>
+              <button class="chip" data-preset="custom" type="button" data-i18n="filter_preset_custom">Custom</button>
+              <span data-custom-wrap hidden style="display:inline-flex;gap:6px;align-items:center">
+                <input type="date" data-range="from" aria-label="From" />
+                <input type="date" data-range="to" aria-label="To" />
+                <button class="chip apply" data-apply="1" type="button" data-i18n="action_apply">Apply</button>
+              </span>
+            </div>
+          </div>
         </section>
 
         <div id="errorSlot"></div>
@@ -583,32 +599,13 @@
               <span class="icon-wrap" data-icon="chart"></span>
               <span data-i18n="sec_daily_trend">Revenue Trend</span>
             </div>
-            <div class="section-head-right">
-              <div class="seg" id="rangeFilter" role="group" aria-label="Period">
-                <button class="seg-btn active" data-mode="daily" type="button" data-i18n="trend_mode_daily">Daily</button>
-                <button class="seg-btn" data-mode="last" type="button" data-i18n="trend_mode_last">Last Month</button>
-                <button class="seg-btn" data-mode="custom" type="button" data-i18n="trend_mode_custom">Custom</button>
-              </div>
-              <span class="section-note" id="trendNote">—</span>
-            </div>
+            <span class="section-note" id="trendNote">—</span>
           </div>
           <div class="section-body">
             <div class="chart-wrap" dir="ltr" style="height:280px">
               <canvas id="dailyChart"></canvas>
             </div>
             <div class="legend" id="dailyLegend"></div>
-          </div>
-
-          <div class="range-pop" id="rangePop" hidden>
-            <label>
-              <span data-i18n="filter_from">From</span>
-              <input type="date" id="rangeFrom" />
-            </label>
-            <label>
-              <span data-i18n="filter_to">To</span>
-              <input type="date" id="rangeTo" />
-            </label>
-            <button class="chip apply" id="rangeApply" type="button" data-i18n="action_apply">Apply</button>
           </div>
 
           <div class="section-head" style="padding-top:6px">
