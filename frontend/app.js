@@ -122,11 +122,6 @@ function setStatus(kind, text) {
   $("#statusPillText").textContent = text;
 }
 
-function setDemoMode(on) {
-  const pill = $("#demoPill");
-  if (pill) pill.hidden = !on;
-}
-
 // ----------------------------------------------------------
 // KPI cards (tickers + sparklines + deltas)
 // ----------------------------------------------------------
@@ -467,7 +462,7 @@ function renderRanking(d) {
       const v = num(mix.sources[k]);
       const pct = num(u && u.sales) > 0 ? (v / num(u.sales)) * 100 : 0;
       charts.showTooltip(
-        '<div class="tt-row"><span>' + i18n.revLabel(k) + "</span></div>" +
+        '<div class="tt-row"><span>' + esc(i18n.revLabel(k)) + "</span></div>" +
         '<div class="tt-row"><span>' + data.fmtMoney(v) + "</span><b>" + pct.toFixed(1) + "%</b></div>",
         e.clientX, e.clientY
       );
@@ -709,30 +704,57 @@ function checkCelebrations(d) {
 // Master render
 // ----------------------------------------------------------
 let firstRenderDone = false;
+let renderChain = 0;
 
 function renderAll(result) {
   state.lastResult = result;
   state.lastData = result.data;
 
+  // Above the fold first: period label, KPI cards, trend chart.
   $("#periodLabel").textContent = periodLabel();
   renderKpis(result);
   renderTrend(result);
-  renderRanking(result.data);
-  renderRevenue(result);
-  renderMonthly(result.data);
-  renderAnnual(result.data);
-  renderUnits(result.data);
-  checkCelebrations(result.data);
 
-  // Defer non-critical work to idle time to avoid blocking the main thread
-  if (!firstRenderDone) {
-    firstRenderDone = true;
-    if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(() => {
-        // Warm up chart laziness, etc.
-      }, { timeout: 2000 });
-    }
+  // Subsequent full renders (refresh, language switch, theme,
+  // bfcache restore) stay synchronous; only the very first
+  // paint is chunked.
+  if (firstRenderDone) {
+    renderChain++; // cancel any still-pending first-paint chunks
+    renderRanking(result.data);
+    renderRevenue(result);
+    renderMonthly(result.data);
+    renderAnnual(result.data);
+    renderUnits(result.data);
+    checkCelebrations(result.data);
+    return;
   }
+
+  firstRenderDone = true;
+  const myChain = ++renderChain;
+  const tasks = [
+    () => renderRanking(result.data),
+    () => renderRevenue(result),
+    () => renderMonthly(result.data),
+    () => renderAnnual(result.data),
+    () => renderUnits(result.data),
+    () => checkCelebrations(result.data),
+  ];
+  let i = 0;
+  const step = () => {
+    if (renderChain !== myChain) return; // superseded by a newer full render
+    const fn = tasks[i++];
+    fn();
+    if (i < tasks.length) schedule();
+  };
+  // One section per task. rAF normally; a setTimeout fallback
+  // keeps the chain alive when rAF is throttled or paused.
+  const schedule = () => {
+    let ran = false;
+    const run = () => { if (ran) return; ran = true; step(); };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+    setTimeout(run, 32);
+  };
+  schedule();
 }
 
 function rerenderFromCache() {
@@ -783,7 +805,6 @@ async function load() {
         }
       },
     });
-    setDemoMode(!!result.demo);
     renderAll(result);
     data.idlePrefetch(state.year, state.month);
 

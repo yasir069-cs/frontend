@@ -91,7 +91,7 @@ export function initSidebar(opts) {
   if (mql.addEventListener) mql.addEventListener("change", onMq);
   else if (mql.addListener) mql.addListener(onMq);
 
-  // Nav â†’ smooth scroll to sections + scrollspy.
+  // Nav → smooth scroll to sections + scrollspy.
   const navItems = Array.from(app.querySelectorAll(".nav-item"));
   const sections = navItems
     .map((n) => document.getElementById("sec-" + (n.dataset.nav || "")))

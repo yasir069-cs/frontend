@@ -9,6 +9,16 @@
 /* ---------- Nav icons ---------- */
 .nav-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; color: var(--brand-accent); }
 
+/* ---------- Below-fold render skipping ----------
+   Every .section is below the fold (the KPI block #sec-overview
+   carries no .section class), so offscreen sections skip
+   layout/paint until they approach the viewport; the auto
+   intrinsic size keeps scrollbar geometry stable. */
+.section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
 /* ---------- Section entrance ---------- */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(6px); }

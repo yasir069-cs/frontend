@@ -263,10 +263,6 @@ export function getLang() {
   return current;
 }
 
-export function isRTL() {
-  return current === "ar";
-}
-
 export function setLang(lang) {
   if (lang !== "en" && lang !== "ar") lang = "en";
   if (lang === current) return;

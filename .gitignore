@@ -56,3 +56,6 @@ yarn-error.log*
 # Editor scratch
 *.swp
 *.swo
+
+# Deployment archives
+*.zip

@@ -7,15 +7,15 @@
 
 "use strict";
 
-const VERSION = "ich-v3.1.2";
+const VERSION = "ich-v3.1.3";
 const STATIC_CACHE = "ich-static-" + VERSION;
 const API_CACHE = "ich-api-" + VERSION;
 
 const PRECACHE = [
   "./",
   "./index.html",
-  "./styles.css?v=7",
-  "./app.bundle.js?v=7",
+  "./styles.css?v=8",
+  "./app.bundle.js?v=8",
 ];
 
 self.addEventListener("install", (event) => {
@@ -86,14 +86,14 @@ self.addEventListener("fetch", (event) => {
 
   // Static + fonts: cache-first, network fill.
   event.respondWith(
-    caches.match(req, { ignoreSearch: url.origin === self.location.origin ? false : true }).then((hit) => {
+    caches.match(req, { ignoreSearch: !sameOrigin }).then((hit) => {
       if (hit) return hit;
       return fetch(req)
         .then((res) => {
           if (res && (res.ok || res.type === "opaque")) {
             const clone = res.clone();
             caches
-              .open(sameOrigin ? STATIC_CACHE : STATIC_CACHE)
+              .open(STATIC_CACHE)
               .then((c) => c.put(req, clone))
               .catch(() => { /* opaque or quota — ignore */ });
           }

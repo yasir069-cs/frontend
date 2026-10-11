@@ -21,7 +21,11 @@ import { BRANCHES, ACTIVE_CODES, PENDING_CODES, REVENUE_KEYS } from "./themes.js
 import { getDemoDashboard } from "./demo.js";
 
 const API_BASE =
-  (typeof window !== "undefined" && window.ICH_API_BASE) || "http://localhost:8030";
+  (typeof window !== "undefined" && window.ICH_API_BASE) ||
+  (typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? "http://localhost:8030"
+    : ""); // same-origin (/api/...) in production
 
 const DEFAULT_TIMEOUT = 12000;
 const FRESH_TTL = 30000;
@@ -252,10 +256,6 @@ function swrGet(path, params, opts) {
         .finally(() => { hit.inflight = false; });
     }
     return Promise.resolve({ key, data: hit.data, fresh, token });
-  }
-
-  if (hit && hit.promise && !o.force) {
-    return hit.promise;
   }
 
   // Stale-while-revalidate from localStorage: instant paint with
@@ -624,10 +624,26 @@ export function readCachedDashboard(year, month) {
 }
 
 /**
+ * Lean per-month daily fetch for custom ranges: exactly one
+ * request per touched month (no prev/next context), served from
+ * the SWR cache when warm, with a per-month demo fallback so the
+ * trend always has rows to draw.
+ */
+async function getMonthDaily(y, m) {
+  if (!isDemoForced()) {
+    const r = await swrGet("/api/dashboard", { year: y, month: m }, {
+      normalize: normalizeFor(y, m),
+    }).catch(() => null);
+    if (r && r.data && Array.isArray(r.data.daily)) return r.data.daily;
+  }
+  const norm = normalizeDashboard(getDemoDashboard(y, m), y, m);
+  return (norm && norm.daily) || [];
+}
+
+/**
  * Custom-range daily rows: fetches every month the range touches
- * in parallel (per-month fetch + merge), then slices to [from,to].
- * Falls back per-month to demo data when the backend fails, so
- * the trend always has rows to draw.
+ * in parallel (one lean request per month), then slices to
+ * [from,to].
  */
 export async function getDailyRange(from, to) {
   if (!from || !to || from > to) return [];
@@ -645,12 +661,12 @@ export async function getDailyRange(from, to) {
   }
   const results = await Promise.all(
     months.map(({ y, m }) =>
-      getDashboard(y, m).catch(() => null)
+      getMonthDaily(y, m).catch(() => [])
     )
   );
   let rows = [];
-  results.forEach((r) => {
-    if (r && r.data && Array.isArray(r.data.daily)) rows = rows.concat(r.data.daily);
+  results.forEach((daily) => {
+    if (Array.isArray(daily)) rows = rows.concat(daily);
   });
   rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return rows.filter((r) => r.date >= from && r.date <= to);
@@ -722,4 +738,3 @@ export function clearCaches() {
   } catch (_) { /* ignore */ }
 }
 
-export const BASE_URL = API_BASE;

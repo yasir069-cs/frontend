@@ -262,8 +262,6 @@
     .status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
     .status-pill.syncing .dot { background: var(--warn); }
     .status-pill.offline .dot { background: var(--bad); }
-    .status-pill.demo, #demoPill { border-style: dashed; color: var(--text-3); }
-    #demoPill .dot { background: var(--text-3); }
 
     .refresh-btn, .lang-toggle, #theme-toggle {
       display: inline-flex; align-items: center; gap: 8px;
@@ -303,6 +301,8 @@
     .filter { display: flex; flex-direction: column; gap: 6px; }
     .filter > label { font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; }
     .filter-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+    [data-custom-wrap] { display: inline-flex; gap: 6px; align-items: center; }
+    [data-custom-wrap][hidden] { display: none; }
     .chip {
       min-height: 38px; padding: 0 13px; border-radius: 999px;
       border: 1px solid var(--border); color: var(--text-2);
@@ -449,7 +449,7 @@
 
   <!-- Component CSS: render-blocking so skeleton and rendered layout
        are identical from the very first paint (no post-FCP relayout). -->
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=8" />
 </head>
 <body>
   <div class="app" id="app">
@@ -501,7 +501,7 @@
       </nav>
 
       <div class="sidebar-foot">
-        <div>v3.0 · Force Holding Co</div>
+        <div>v3.1.3 · Force Holding Co</div>
       </div>
     </aside>
 
@@ -521,11 +521,6 @@
         </div>
 
         <div class="header-actions">
-          <span class="status-pill demo" id="demoPill" hidden>
-            <span class="dot" aria-hidden="true"></span>
-            <span data-i18n="status_demo">Demo data</span>
-          </span>
-
           <span class="status-pill" id="statusPill" aria-live="polite">
             <span class="dot" aria-hidden="true"></span>
             <span id="statusPillText">Online</span>
@@ -563,7 +558,7 @@
               <button class="chip" data-preset="30" type="button" data-i18n="filter_preset_30">Last 1 Month</button>
               <button class="chip active" data-preset="month" type="button" data-i18n="filter_preset_month">Month</button>
               <button class="chip" data-preset="custom" type="button" data-i18n="filter_preset_custom">Custom</button>
-              <span data-custom-wrap hidden style="display:inline-flex;gap:6px;align-items:center">
+              <span data-custom-wrap hidden>
                 <input type="date" data-range="from" aria-label="From" />
                 <input type="date" data-range="to" aria-label="To" />
                 <button class="chip apply" data-apply="1" type="button" data-i18n="action_apply">Apply</button>
@@ -733,7 +728,7 @@
         </section>
 
         <footer class="foot">
-          Central Sales Dashboard · Force Holding Co · v3.0
+          Central Sales Dashboard · Force Holding Co · v3.1.3
         </footer>
       </main>
     </div>
@@ -747,7 +742,7 @@
        (components/rangeFilter.js ships as an available component
         and is intentionally not bundled after the v3.1 UI rework.)
        ============================================================ -->
-  <script src="app.bundle.js?v=7" defer></script>
+  <script src="app.bundle.js?v=8" defer></script>
 
   <!-- Service worker (HTTPS or localhost only) -->
   <script>
@@ -756,7 +751,7 @@
         var host = location.hostname;
         if (location.protocol === "https:" || host === "localhost" || host === "127.0.0.1") {
           window.addEventListener("load", function () {
-            navigator.serviceWorker.register("service-worker.js?v=6").catch(function () { /* offline mode unavailable */ });
+            navigator.serviceWorker.register("service-worker.js?v=8").catch(function () { /* offline mode unavailable */ });
           });
         }
       }

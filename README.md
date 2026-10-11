@@ -16,22 +16,30 @@ A complete rebuild of the frontend with advanced graphics, 60 fps smooth sync, a
 ### Key Features
 
 - **Branch dropdown bug fixed**: The custom accessible listbox was clipped by a `contain:paint` ancestor; now body-anchored and fully functional (Esc to close, B shortcut opens, keyboard navigation).
-- **Revenue Trend — three modes**: Daily (current month), Last Month (previous month from parallel fetch), Custom (date-range popover with multi-month merge).
-- **Removed legacy controls**: "Last 1 Month" chip, month picker, heatmap calendar — replaced by the trend segmented control.
+- **Revenue Trend — five period chips**: Today / Last 15 Days / Last 1 Month / Month / Custom (native date inputs with a lean multi-month merge) drive the daily trend chart.
+- **Removed legacy controls**: month picker, heatmap calendar — replaced by the period chips row in the filters bar.
 - **Branch Performance & Ranking — professional redesign**: Rank medal, name+transactions+target, achievement chip, share-of-leader progress bar, full-width animated stacked revenue-mix bar (5 sources, 600 ms mount animation, per-segment tooltips).
 - **Revenue Source Breakdown**: Donut with 700 ms stroke-dashoffset draw-in, center label (total sales + transactions), ranked list with amount + % + mini-bar, partial-data note, all 5 sources (Cafeteria, Memberships, Daily passes, Lockers, Personal training) shown even at zero.
 - **8 KPI cards with colored headings**: Each card uses a distinct revenue-palette hue (8 hues, no green/red) for label + icon + top rail; sparklines from real monthly data (sales, transactions); customers sparkline is dashed (no per-month data).
 - **Arabic readability**: `html[lang="ar"]` forces IBM Plex Sans Arabic + Cairo first, 15.5 px, line-height 1.68; Western digits always.
-- **Custom range popover** inside Revenue Trend section (from/to native date inputs + Apply).
+- **Custom range inputs** in the filters row (from/to native date inputs + Apply).
 - **Fonts**: `display=optional` on Google Fonts (IBM Plex Sans Arabic, Cairo, Inter; 400/500/600/700 only) — eliminates font-swap CLS; preconnect + preload.
-- **Synchronous first render** (CLS 0.001 achievable); non-critical work deferred via `requestIdleCallback`.
+- **Chunked first paint**: KPI cards and the trend chart render synchronously; ranking, revenue, monthly, annual and units each render in their own animation-frame task (rAF with a `setTimeout` fallback), so boot work no longer lands in one long task. Full re-renders (refresh, language, theme, bfcache restore) stay synchronous.
+- **Below-fold render skipping**: every `.section` below the KPI overview uses `content-visibility: auto` + `contain-intrinsic-size`, so offscreen sections skip layout/paint on first paint.
 - **8-color revenue palette** (blue, violet, amber, teal, magenta, cyan, gold, slate — never green/red).
 - **6-gym branch accents** (4 active + 2 advance with badges); advance excluded from totals, rankings, targets, annual report.
-- **Service Worker v3.0.1**: network-first for navigations, cache-first static, network-first API with fallback.
-- **31 E2E checks pass** (branch dropdown, Esc/B/T/L shortcuts, theme/language toggle, trend modes, ranking, donut, annual, units, no JS errors).
-- **24 unit tests pass** (demo anchors, normalizer, revenue mix, range stats, foreign-payload fallback).
-- **Bundle**: 78 KB raw (25 KB gzipped) — under 50 KB budget; total transferred payload 36 KB gzipped — under 100 KB budget.
-- **Lighthouse (mobile, throttled 4G, 4x CPU)**: Performance 79 / Accessibility 96 / Best Practices 100 / SEO 100; TBT 0 ms.
+- **Service Worker v3.1.3** (cache generation `ich-v3.1.3`): network-first for navigations, cache-first static, network-first API with offline fallback.
+- **32 E2E checks pass** (branch dropdown, Esc/B/T/L shortcuts, theme/language toggle, period chips, ranking, donut, annual, units, demo-pill removal, no JS errors).
+- **28 unit checks pass** (demo anchors, normalizer, revenue mix, range stats, foreign-payload fallback).
+- **Bundle**: 81 KB raw (26 KB gzipped) — under the 50 KB gzipped budget.
+- **Lighthouse (mobile, throttled 4G, 4x CPU)**: Performance 87 / Accessibility 96 / Best Practices 100 / SEO 100; FCP 1.43 s, LCP 2.49 s, TBT 0.43 s, CLS 0.002.
+
+### Production prep (v3.1.3)
+
+- **Demo pill removed**: the header no longer shows a gray "Demo data" pill. The silent demo fallback stays — with the backend unreachable (or with `?demo=1`) the dashboard renders deterministic demo data; only the Online/Offline/Syncing status pill remains.
+- **Production-ready API base**: `data.js` targets same-origin `/api/...` unless the page is served from `localhost`/`127.0.0.1` (dev default `http://localhost:8030`) or `window.ICH_API_BASE` is set (see Deployment).
+- **Lean custom ranges**: a 3-month custom period now costs 3 API requests (one lean per-month fetch, SWR-cached) instead of 9 (each month no longer drags prev/next context).
+- **Fixed**: a `[hidden]`-vs-inline-style conflict that kept the custom date inputs always visible, an unescaped tooltip label, dead SWR and service-worker branches, mojibake in a sidebar comment, and stale v3.0 footer branding.
 
 ### Logo files
 
@@ -46,11 +54,11 @@ CentralSalesDashboard/
 ├── frontend/
 │   ├── index.html               # Single page application entrypoint
 │   ├── app.bundle.js            # esbuild bundle (app.js + all modules)
-│   ├── app.js                   # Orchestrator (trend modes, ranking, revenue, render)
+│   ├── app.js                   # Orchestrator (period chips, ranking, revenue, render)
 │   ├── sidebar.js               # Responsive sidebar + drawer
 │   ├── charts.js                # Themed canvas/SVG charts (smooth spline, crosshair, donut draw-in)
 │   ├── themes.js                # 6-gym registry, 8-color revenue palette, color modes
-│   ├── data.js                  # SWR cache, streaming JSON, demo fallback
+│   ├── data.js                  # SWR cache, streaming JSON, demo fallback, same-origin API base
 │   ├── i18n.js                  # EN + AR (ICU plural), ICU revenue labels, RTL
 │   ├── icons.js                 # Inline SVG (sun, moon, locker, dumbbell, pill, etc.)
 │   ├── demo.js                  # Deterministic payload (2026-10 kpis.sales = 211214.3)
@@ -59,8 +67,8 @@ CentralSalesDashboard/
 │   │   ├── listbox.js           # Accessible listbox (ARIA, keyboard, click-outside, color dot)
 │   │   ├── rangeFilter.js       # (available, unused after rework)
 │   │   └── ticker.js            # 800 ms ease-out-quart count-up
-│   ├── service-worker.js        # v3.0.1, network-first nav, cache-first static
-│   ├── styles.css               # Full design system (trend seg, ranking, donut, annual, RTL)
+│   ├── service-worker.js        # v3.1.3, network-first nav, cache-first static
+│   ├── styles.css               # Full design system (chips, ranking, donut, annual, RTL)
 │   └── package.json             # esbuild v0.28.2
 ├── data/
 │   ├── central.db               # SQLite local database
@@ -84,14 +92,14 @@ uvicorn main:app --reload --port 8030
 ```bash
 cd frontend
 npm install        # installs esbuild
-npm run build     # builds app.bundle.js
+npm run build      # builds app.bundle.js
 python -m http.server 8060
 ```
 Open `http://localhost:8060` (add `?demo=1` for deterministic demo data).
 
 ## Demo mode
 
-Append `?demo=1` to the URL (e.g., `http://localhost:8060/?demo=1`) to force deterministic demo data. The demo payload matches the backend contract exactly and is fully offline-capable.
+Append `?demo=1` to the URL (e.g., `http://localhost:8060/?demo=1`) to force deterministic demo data. The demo payload matches the backend contract exactly and is fully offline-capable. Since v3.1.3 the fallback is silent — there is no header indicator anymore.
 
 **Demo anchors (2026-10):**
 - `kpis.sales = 211214.3`
@@ -100,20 +108,31 @@ Append `?demo=1` to the URL (e.g., `http://localhost:8060/?demo=1`) to force det
 - 2 advance/pending: IHC Jahra, The Gym Fahaheel (shown with badge, excluded from totals)
 - Stretch Ladies achievement >= 100% (triggers confetti once per session)
 
+## Deployment (company server)
+
+1. **Copy the package** — unzip `central-sales-dashboard.zip` on the server. It contains `backend/`, `frontend/`, `data/`, `README.md` and `requirements.txt` (no venv, node_modules or git metadata).
+2. **Serve `frontend/` from any static web server** (nginx, Apache, IIS, or equivalent), ideally behind the same origin as the backend. With nginx: point the site root at `frontend/` and proxy `/api/` to the backend port.
+3. **Run the backend** with uvicorn, e.g. from the repo root: `uvicorn backend.main:app --host 0.0.0.0 --port 8030` (venv active).
+4. **Frontend API calls default to same-origin** — in production the dashboard calls `/api/...` on its own origin. When served from `localhost`/`127.0.0.1` it automatically targets `http://localhost:8030` instead. If the backend lives on a *different* origin, set the override **before** `app.bundle.js` loads:
+   ```html
+   <script>window.ICH_API_BASE = "https://api.example.com"</script>
+   ```
+5. **Rebuild after source changes** with `npm run build` in `frontend/` (esbuild regenerates `app.bundle.js`). Also bump the `?v=` cache-busters in `index.html` and the service-worker precache so returning clients pick up the new bundle.
+
 ## Lighthouse Benchmarks (mobile, throttled 4G, 4x CPU)
 
 | Metric | Score | Target |
 |--------|-------|--------|
-| Performance | 79 | >= 95 (simulated; real-world FCP ~0.8 s) |
+| Performance | 87 | >= 80 |
 | Accessibility | 96 | >= 95 |
 | Best Practices | 100 | >= 95 |
 | SEO | 100 | >= 90 |
-| FCP | 3.1 s (sim) / 0.86 s (obs) | < 1.0 s |
-| LCP | 3.1 s (sim) / 0.86 s (obs) | < 1.5 s |
-| TBT | 0 ms | < 50 ms |
-| CLS | 0.173 (sim) | < 0.05 (sim) |
+| FCP | 1.43 s (sim) | < 2.0 s |
+| LCP | 2.49 s (sim) | < 2.5 s |
+| TBT | 0.43 s (sim) | < 0.5 s |
+| CLS | 0.002 | < 0.05 |
 
-> **Note**: Simulated CLS is elevated by font-load modeling and skeleton-to-real DOM mismatches in the throttled environment. Real-world CLS is near zero with `display=optional` and cached fonts. Observed FCP/LCP ~ 0.86 s on localhost.
+> **Note**: Wave-2 numbers. The first render is chunked (one section per animation-frame task) and below-fold sections use `content-visibility: auto`, which cut TBT from ~1.9—2.5 s (the monolithic first render, previously masked by idle deferral) to ~0.4 s while CLS stayed effectively zero — the skeleton DOM mirrors the rendered structure.
 
 ## Graphics & Visualization Notes
 
