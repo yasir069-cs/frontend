@@ -239,18 +239,22 @@
     }
     .icon-btn {
       display: inline-flex; align-items: center; justify-content: center;
+      flex: none;
       width: 40px; height: 40px; border-radius: 10px;
       border: 1px solid var(--border); color: var(--text-2);
       background: var(--panel);
     }
     .icon-btn:hover { color: var(--text-1); border-color: var(--axis-line); }
+    /* Hydrated icons are always 18px svgs; pre-size the spans so header widths
+       are identical before and after icons.js runs. */
+    [data-icon] { display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none; }
     .title-block { min-width: 0; }
     .title-block h1 { font-size: 16.5px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .subtitle { color: var(--text-3); font-size: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
     .header-actions { margin-inline-start: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
     .status-pill, .pill {
-      display: inline-flex; align-items: center; gap: 7px;
+      display: inline-flex; align-items: center; gap: 7px; min-height: 40px;
       font-size: 12px; font-weight: 500;
       padding: 7px 12px; border-radius: 999px;
       border: 1px solid var(--border); background: var(--panel); color: var(--text-2);
@@ -340,7 +344,7 @@
     .lb-popup li:hover, .lb-popup li.active { background: var(--panel-2); color: var(--text-1); }
     .lb-popup li[aria-selected="true"] { color: var(--text-1); font-weight: 600; box-shadow: inset 2px 0 0 var(--brand-accent); }
 
-    /* ---------- KPI grid + skeleton shimmer ---------- */
+    /* ---------- KPI grid + skeletons ---------- */
     .kpi-grid {
       display: grid; gap: 12px;
       grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
@@ -389,13 +393,6 @@
       position: relative; overflow: hidden;
       background: var(--skeleton); border-radius: 6px;
     }
-    .skeleton::after {
-      content: ""; position: absolute; inset: 0;
-      background: linear-gradient(90deg, transparent, var(--skeleton-hi), transparent);
-      transform: translateX(-100%);
-      animation: shimmer 1.2s infinite linear;
-    }
-    @keyframes shimmer { to { transform: translateX(100%); } }
     .k-line { height: 12px; }
     .k-pill { height: 14px; width: 90px; border-radius: 999px; }
 
@@ -447,13 +444,12 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.001s !important;
       }
-      .skeleton::after { animation: none; }
     }
   </style>
 
-  <!-- Non-critical CSS: deferred, below-the-fold components -->
-  <link rel="preload" as="style" href="styles.css?v=6" onload="this.onload=null;this.rel='stylesheet'" />
-  <noscript><link rel="stylesheet" href="styles.css?v=6" /></noscript>
+  <!-- Component CSS: render-blocking so skeleton and rendered layout
+       are identical from the very first paint (no post-FCP relayout). -->
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 <body>
   <div class="app" id="app">
@@ -581,14 +577,14 @@
         <!-- Overview: KPIs -->
         <section id="sec-overview" aria-label="Key metrics">
           <div class="kpi-grid" id="kpiGrid">
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:90px"></div></div><div class="skeleton k-line" style="width:62%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:80px"></div></div><div class="skeleton k-line" style="width:58%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:96px"></div></div><div class="skeleton k-line" style="width:64%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:86px"></div></div><div class="skeleton k-line" style="width:56%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:92px"></div></div><div class="skeleton k-line" style="width:60%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:88px"></div></div><div class="skeleton k-line" style="width:54%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:98px"></div></div><div class="skeleton k-line" style="width:66%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
-            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:84px"></div></div><div class="skeleton k-line" style="width:52%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:16px"></span></div><div class="skeleton" style="height:20px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:90px;height:21px"></div></div><div class="skeleton k-line" style="width:62%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:80px;height:21px"></div></div><div class="skeleton k-line" style="width:58%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div><div class="skeleton" style="height:22px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:96px;height:21px"></div></div><div class="skeleton k-line" style="width:64%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:86px;height:21px"></div></div><div class="skeleton k-line" style="width:56%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:92px;height:21px"></div></div><div class="skeleton k-line" style="width:60%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:88px;height:21px"></div></div><div class="skeleton k-line" style="width:54%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:98px;height:21px"></div></div><div class="skeleton k-line" style="width:66%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div><div class="skeleton" style="height:22px;width:60px;margin-top:8px"></div></div>
+            <div class="kpi"><div class="kpi-head"><div class="skeleton k-line" style="width:84px;height:21px"></div></div><div class="skeleton k-line" style="width:52%;height:27px;margin-top:6px"></div><div class="kpi-sub"><span class="skeleton k-pill" style="height:17px"></span></div><div class="skeleton" style="height:22px;width:60px;margin-top:8px"></div></div>
           </div>
         </section>
 
@@ -635,10 +631,10 @@
             </div>
             <div class="section-body">
               <div class="ranking" id="rankingList">
-                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:62%"></div><div class="skeleton k-line" style="width:42%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
-                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:55%"></div><div class="skeleton k-line" style="width:38%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
-                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:58%"></div><div class="skeleton k-line" style="width:44%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
-                <div class="ranking-row" style="opacity:.55"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span><div><div class="skeleton k-line" style="width:50%"></div><div class="skeleton k-line" style="width:36%;margin-top:6px"></div></div><span class="skeleton k-pill"></span></div>
+                <div class="ranking-row" style="opacity:.6"><div class="rr-top"><span class="rank">#1</span><span class="lb-dot big"></span><div class="rr-name"><div class="skeleton k-line" style="width:58%"></div><div class="skeleton k-line" style="width:40%;margin-top:5px"></div></div><div class="rr-amt"><div class="skeleton k-line" style="width:74px"></div><span class="ach-chip neutral"><span class="skeleton k-line" style="width:42px;height:10px;display:inline-block"></span></span></div></div><div class="rr-progress"><span style="width:62%"></span></div><div class="r-bar"><span class="mix-seg" style="width:100%;background:var(--skeleton)"></span></div></div>
+                <div class="ranking-row" style="opacity:.6"><div class="rr-top"><span class="rank">#2</span><span class="lb-dot big"></span><div class="rr-name"><div class="skeleton k-line" style="width:52%"></div><div class="skeleton k-line" style="width:40%;margin-top:5px"></div></div><div class="rr-amt"><div class="skeleton k-line" style="width:74px"></div><span class="ach-chip neutral"><span class="skeleton k-line" style="width:42px;height:10px;display:inline-block"></span></span></div></div><div class="rr-progress"><span style="width:54%"></span></div><div class="r-bar"><span class="mix-seg" style="width:100%;background:var(--skeleton)"></span></div></div>
+                <div class="ranking-row" style="opacity:.6"><div class="rr-top"><span class="rank">#3</span><span class="lb-dot big"></span><div class="rr-name"><div class="skeleton k-line" style="width:55%"></div><div class="skeleton k-line" style="width:40%;margin-top:5px"></div></div><div class="rr-amt"><div class="skeleton k-line" style="width:74px"></div><span class="ach-chip neutral"><span class="skeleton k-line" style="width:42px;height:10px;display:inline-block"></span></span></div></div><div class="rr-progress"><span style="width:58%"></span></div><div class="r-bar"><span class="mix-seg" style="width:100%;background:var(--skeleton)"></span></div></div>
+                <div class="ranking-row" style="opacity:.6"><div class="rr-top"><span class="rank">#4</span><span class="lb-dot big"></span><div class="rr-name"><div class="skeleton k-line" style="width:48%"></div><div class="skeleton k-line" style="width:40%;margin-top:5px"></div></div><div class="rr-amt"><div class="skeleton k-line" style="width:74px"></div><span class="ach-chip neutral"><span class="skeleton k-line" style="width:42px;height:10px;display:inline-block"></span></span></div></div><div class="rr-progress"><span style="width:46%"></span></div><div class="r-bar"><span class="mix-seg" style="width:100%;background:var(--skeleton)"></span></div></div>
               </div>
             </div>
           </section>
@@ -657,12 +653,12 @@
                 <div class="rev-list-wrap">
                   <div id="revList">
                     <ul class="rev-rows">
-                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:40%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
-                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:34%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
-                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:44%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
-                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:30%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
-                      <li class="rev-row"><span class="skeleton k-pill" style="width:9px;height:9px"></span><span class="skeleton k-line" style="width:36%"></span><span class="skeleton k-line" style="width:100%;height:6px"></span><span class="skeleton k-pill"></span></li>
-                      <li class="rev-row total"><span class="skeleton k-line" style="width:22%"></span><span class="skeleton k-pill"></span></li>
+                      <li class="rev-row" style="opacity:.6"><span class="lb-dot"></span><span><span class="skeleton k-line" style="width:82px;display:inline-block"></span></span><span class="rev-bar"><span style="width:100%"></span></span><span class="rev-val"><span class="skeleton k-line" style="width:64px;display:inline-block"></span></span><span class="rev-pct"><span class="skeleton k-line" style="width:36px;display:inline-block"></span></span></li>
+                      <li class="rev-row" style="opacity:.6"><span class="lb-dot"></span><span><span class="skeleton k-line" style="width:76px;display:inline-block"></span></span><span class="rev-bar"><span style="width:100%"></span></span><span class="rev-val"><span class="skeleton k-line" style="width:58px;display:inline-block"></span></span><span class="rev-pct"><span class="skeleton k-line" style="width:36px;display:inline-block"></span></span></li>
+                      <li class="rev-row" style="opacity:.6"><span class="lb-dot"></span><span><span class="skeleton k-line" style="width:88px;display:inline-block"></span></span><span class="rev-bar"><span style="width:100%"></span></span><span class="rev-val"><span class="skeleton k-line" style="width:68px;display:inline-block"></span></span><span class="rev-pct"><span class="skeleton k-line" style="width:36px;display:inline-block"></span></span></li>
+                      <li class="rev-row" style="opacity:.6"><span class="lb-dot"></span><span><span class="skeleton k-line" style="width:70px;display:inline-block"></span></span><span class="rev-bar"><span style="width:100%"></span></span><span class="rev-val"><span class="skeleton k-line" style="width:60px;display:inline-block"></span></span><span class="rev-pct"><span class="skeleton k-line" style="width:36px;display:inline-block"></span></span></li>
+                      <li class="rev-row" style="opacity:.6"><span class="lb-dot"></span><span><span class="skeleton k-line" style="width:92px;display:inline-block"></span></span><span class="rev-bar"><span style="width:100%"></span></span><span class="rev-val"><span class="skeleton k-line" style="width:62px;display:inline-block"></span></span><span class="rev-pct"><span class="skeleton k-line" style="width:36px;display:inline-block"></span></span></li>
+                      <li class="rev-row total" style="opacity:.6"><span class="rev-name"><span class="skeleton k-line" style="width:44px;display:inline-block"></span></span><span class="rev-val"><span class="skeleton k-line" style="width:72px;display:inline-block"></span></span><span class="rev-pct"><span class="skeleton k-line" style="width:36px;display:inline-block"></span></span></li>
                     </ul>
                   </div>
                   <div class="empty" id="revenueEmpty" hidden></div>
@@ -684,12 +680,12 @@
           </div>
           <div class="section-body">
             <div class="units-grid" id="unitsGrid">
-                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:52%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:44%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
-                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:56%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:40%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
-                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:50%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:48%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
-                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:54%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:42%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
-                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:46%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:38%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
-                <div class="unit"><div class="unit-head"><span class="skeleton k-line" style="width:48%"></span><span class="skeleton k-pill" style="width:44px;height:12px"></span></div><div class="skeleton k-line" style="width:36%;height:19px;margin:8px 0"></div><div class="skeleton" style="height:6px;margin:10px 0 8px"></div><div class="unit-meta"><span class="skeleton k-pill"></span><span class="skeleton k-pill"></span></div></div>
+                <div class="unit" style="opacity:.6"><div class="unit-head"><span class="unit-name"><span class="skeleton k-line" style="width:120px;display:inline-block"></span></span><span class="unit-status"><span class="skeleton k-line" style="width:34px;height:10px;display:inline-block"></span></span></div><div class="unit-sales"><div class="skeleton k-line" style="width:44%;height:19px;display:inline-block"></div></div><div class="bar"><span style="width:52%"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:88px"></span><span class="skeleton k-line" style="width:52px"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:104px"></span><span class="skeleton k-line" style="width:64px"></span></div></div>
+                <div class="unit" style="opacity:.6"><div class="unit-head"><span class="unit-name"><span class="skeleton k-line" style="width:128px;display:inline-block"></span></span><span class="unit-status"><span class="skeleton k-line" style="width:34px;height:10px;display:inline-block"></span></span></div><div class="unit-sales"><div class="skeleton k-line" style="width:40%;height:19px;display:inline-block"></div></div><div class="bar"><span style="width:58%"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:92px"></span><span class="skeleton k-line" style="width:56px"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:110px"></span><span class="skeleton k-line" style="width:60px"></span></div></div>
+                <div class="unit" style="opacity:.6"><div class="unit-head"><span class="unit-name"><span class="skeleton k-line" style="width:112px;display:inline-block"></span></span><span class="unit-status"><span class="skeleton k-line" style="width:34px;height:10px;display:inline-block"></span></span></div><div class="unit-sales"><div class="skeleton k-line" style="width:48%;height:19px;display:inline-block"></div></div><div class="bar"><span style="width:46%"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:84px"></span><span class="skeleton k-line" style="width:48px"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:98px"></span><span class="skeleton k-line" style="width:66px"></span></div></div>
+                <div class="unit" style="opacity:.6"><div class="unit-head"><span class="unit-name"><span class="skeleton k-line" style="width:124px;display:inline-block"></span></span><span class="unit-status"><span class="skeleton k-line" style="width:34px;height:10px;display:inline-block"></span></span></div><div class="unit-sales"><div class="skeleton k-line" style="width:42%;height:19px;display:inline-block"></div></div><div class="bar"><span style="width:54%"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:90px"></span><span class="skeleton k-line" style="width:54px"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:106px"></span><span class="skeleton k-line" style="width:58px"></span></div></div>
+                <div class="unit" style="opacity:.6"><div class="unit-head"><span class="unit-name"><span class="skeleton k-line" style="width:116px;display:inline-block"></span></span><span class="unit-status"><span class="skeleton k-line" style="width:34px;height:10px;display:inline-block"></span></span></div><div class="unit-sales"><div class="skeleton k-line" style="width:38%;height:19px;display:inline-block"></div></div><div class="bar"><span style="width:44%"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:86px"></span><span class="skeleton k-line" style="width:50px"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:102px"></span><span class="skeleton k-line" style="width:62px"></span></div></div>
+                <div class="unit" style="opacity:.6"><div class="unit-head"><span class="unit-name"><span class="skeleton k-line" style="width:108px;display:inline-block"></span></span><span class="unit-status"><span class="skeleton k-line" style="width:34px;height:10px;display:inline-block"></span></span></div><div class="unit-sales"><div class="skeleton k-line" style="width:46%;height:19px;display:inline-block"></div></div><div class="bar"><span style="width:60%"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:82px"></span><span class="skeleton k-line" style="width:52px"></span></div><div class="unit-meta"><span class="skeleton k-line" style="width:100px"></span><span class="skeleton k-line" style="width:64px"></span></div></div>
               </div>
               <div class="pending-note" id="pendingNote"></div>
             </div>
@@ -751,7 +747,7 @@
        (components/rangeFilter.js ships as an available component
         and is intentionally not bundled after the v3.1 UI rework.)
        ============================================================ -->
-  <script src="app.bundle.js?v=6" defer></script>
+  <script src="app.bundle.js?v=7" defer></script>
 
   <!-- Service worker (HTTPS or localhost only) -->
   <script>
